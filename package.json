@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "@types/bootstrap": "^4.3.0",
+    "@types/jquery": "^3.3.29",
+    "parcel-bundler": "^1.12.3",
+    "prettier": "^1.18.2"
+  },
+  "devDependencies": {
+    "typescript": "^3.5.2"
+  }
+}
