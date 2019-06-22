@@ -1,4 +1,5 @@
-import { askServer } from './server';
+import { askServer, ServerResponse, Ask, AskStatus } from './server';
+import { LookupAddress } from 'dns';
 
 /*
 
@@ -40,6 +41,7 @@ export class KeyMaker {
 
 export type Widget = {
     dom: JQuery;
+    [others: string]: any;
 };
 export function FunctionalWidget(dom: JQuery) {
     return { dom };
@@ -61,6 +63,17 @@ export class ObservableState<T> {
 
 /*
 
+RECORDS
+
+*/
+export type Record = {
+    id: number;
+    date: number;
+    [others: string]: any;
+};
+
+/*
+
 RESOURCES
 
 */
@@ -70,9 +83,11 @@ export class ResourceEndpoint {
     constructor(name: string) {
         this.name = name;
     }
-    askEndpoint(...partialArgs: any[]): object {
+    async askEndpoint(...partialArgs: any[]): Promise<ServerResponse> {
         return askServer([this.name].concat(partialArgs));
     }
+
+    // NOTE: ALL THESE RETURN PROMISES
 
     retrieveAll() {
         return this.askEndpoint('retrieveAll');
@@ -96,23 +111,28 @@ export class ResourceEndpoint {
         return this.askEndpoint('update', record);
     }
 }
-export class ResourceObservable extends ObservableState<object> {
+export class ResourceObservable extends ObservableState<Ask> {
     endpoint: ResourceEndpoint;
 
     constructor(endpoint: ResourceEndpoint) {
         super({
-            loaded: false,
-            error: false
+            status: AskStatus.LOADING
         });
         this.endpoint = endpoint;
     }
-    async load(): Promise<object> {
+    async load() {
         const response = await this.endpoint.retrieveAll();
-        this.changeTo({
-            ...response,
-            loaded: true
-        });
-        return response;
+        if (response.error) {
+            this.changeTo({
+                status: AskStatus.ERROR,
+                message: response.message
+            });
+        } else {
+            this.changeTo({
+                status: AskStatus.LOADED,
+                val: response.val as Record[]
+            });
+        }
     }
 }
 export class Resource {
@@ -123,6 +143,19 @@ export class Resource {
         this.name = name;
         this.endpoint = new ResourceEndpoint(this.name);
         this.state = new ResourceObservable(this.endpoint);
+    }
+
+    createMarker(id: number, builder: (record: Record) => JQuery): JQuery {
+        if (this.state.val.status === AskStatus.LOADED) {
+            const record = this.state.val.val.records.filter(
+                (record: Record) => record.id == id
+            )[0];
+            if (record === undefined || record === null)
+                return $('<span>???</span>');
+            return builder(record);
+        } else {
+            return $('<span>???</span>');
+        }
     }
 }
 

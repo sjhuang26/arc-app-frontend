@@ -5,8 +5,7 @@ import {
     container,
     Widget,
     FunctionalWidget,
-    ObservableState,
-    onMount
+    ObservableState
 } from '../core/shared';
 
 export function SpinnerWidget(
@@ -109,26 +108,55 @@ export function PillsWidget(
     return { dom };
 }*/
 
-export function FormItemWidget(type: string): Widget {
-    if (type == 'search') {
-        return FunctionalWidget(
-            $('<input class="form-control" type="search">')
-        );
-    }
-    if (type == 'submit') {
-        return FunctionalWidget(
-            $(
-                '<button class="btn btn-outline-success type="submit">Search</button>'
-            )
-        );
-    }
-    throw new Error('unknown form item widget type');
+export type FormValueWidget = Widget & {
+    getValue(): any;
+};
+
+export function FormStringInputWidget(type: string): FormValueWidget {
+    const dom = $(`<input type="text" class="form-control" type="${type}">`);
+    return {
+        dom,
+        getValue(): string {
+            return String(dom.val());
+        }
+    };
+}
+
+export function FormNumberInputWidget(type: string): FormValueWidget {
+    const dom = $(`<input type="text" class="form-control" type="${type}">`);
+    return {
+        dom,
+        getValue(): number {
+            if (type == 'datetime-local')
+                return new Date(String(dom.val())).getTime();
+            return Number(dom.val());
+        }
+    };
+}
+
+export function FormSubmitWidget(text: string): Widget {
+    return FunctionalWidget(
+        $(
+            '<button class="btn btn-outline-success type="submit"></button>'
+        ).text(text)
+    );
+}
+export function FormSelectWidget(options: string[]): FormValueWidget {
+    const dom = container('<select class="form-control"></select>')(
+        options.map(o => container('<option></option>')(o))
+    );
+    return {
+        dom,
+        getValue(): string {
+            return dom.val() as string;
+        }
+    };
 }
 export function SearchItemWidget(onSubmit: () => void): Widget {
     return FunctionalWidget(
         $('<form class="form-inline"></form>')
-            .append(FormItemWidget('search').dom)
-            .append(FormItemWidget('submit').dom)
+            .append(FormStringInputWidget('search').dom)
+            .append(FormSubmitWidget('Search').dom)
             .submit(ev => {
                 ev.preventDefault();
                 onSubmit.call(null);

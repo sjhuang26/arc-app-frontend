@@ -3,19 +3,19 @@ import { SpinnerWidget, ButtonWidget } from '../widgets/ui';
 
 const pillsString = `
 <ul class="nav nav-pills">
-  <li class="nav-item">
-    <a class="nav-link">Active</a>
-  </li>
-  <li class="nav-item dropdown">
-    <a class="nav-link dropdown-toggle" data-toggle="dropdown">Dropdown</a>
-    <div class="dropdown-menu">
-      <a class="dropdown-item">Action</a>
-      <a class="dropdown-item">Another action</a>
-    </div>
-  </li>
-  <li class="nav-item">
-    <a class="nav-link">Link</a>
-  </li>
+    <li class="nav-item">
+        <a class="nav-link">Active</a>
+    </li>
+    <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle" data-toggle="dropdown">Dropdown</a>
+        <div class="dropdown-menu">
+            <a class="dropdown-item">Action</a>
+            <a class="dropdown-item">Another action</a>
+        </div>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link">Link</a>
+    </li>
 </ul>`;
 
 export function rootWidget(): Widget {

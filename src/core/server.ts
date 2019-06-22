@@ -1,12 +1,39 @@
-export async function askServer(args: any[]): Promise<object> {
-    return mockAskServer(args);
+export async function askServer(args: any[]): Promise<ServerResponse> {
+    return mockServer(args);
+}
+export type ServerResponse = {
+    error: boolean;
+    val: any;
+    message: string;
+};
+
+export enum AskStatus {
+    LOADING = 'LOADING',
+    LOADED = 'LOADED',
+    ERROR = 'ERROR'
 }
 
-async function mockAskServer(args: any[]): Promise<object> {
+export type Ask =
+    | {
+          status: AskStatus.LOADING;
+      }
+    | {
+          status: AskStatus.LOADED;
+          val: any;
+      }
+    | {
+          status: AskStatus.ERROR;
+          message: string;
+      };
+
+async function mockServer(args: any[]): Promise<ServerResponse> {
     return Promise.resolve({
         error: false,
-        args: args,
-        foobar: 5
+        val: {
+            foobar: args,
+            foobar2: 5
+        },
+        message: ''
     });
 }
 
