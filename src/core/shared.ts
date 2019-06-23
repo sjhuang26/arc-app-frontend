@@ -1,5 +1,11 @@
 import { askServer, ServerResponse, Ask, AskStatus } from './server';
 import { LookupAddress } from 'dns';
+import {
+    FormWidget,
+    preprocessFormConfig,
+    makeBasicStudentConfig
+} from '../widgets/Form';
+import { StringField, NumberField, SelectField } from '../widgets/ui';
 
 /*
 
@@ -43,7 +49,7 @@ export type Widget = {
     dom: JQuery;
     [others: string]: any;
 };
-export function FunctionalWidget(dom: JQuery) {
+export function DomWidget(dom: JQuery) {
     return { dom };
 }
 
@@ -135,14 +141,18 @@ export class ResourceObservable extends ObservableState<Ask> {
         }
     }
 }
+
 export class Resource {
     name: string;
     endpoint: ResourceEndpoint;
     state: ResourceObservable;
-    constructor(name: string) {
+    makeFormWidget: () => Widget;
+
+    constructor(name: string, makeFormWidget: () => Widget) {
         this.name = name;
         this.endpoint = new ResourceEndpoint(this.name);
         this.state = new ResourceObservable(this.endpoint);
+        this.makeFormWidget = makeFormWidget;
     }
 
     createMarker(id: number, builder: (record: Record) => JQuery): JQuery {
@@ -156,6 +166,10 @@ export class Resource {
         } else {
             return $('<span>???</span>');
         }
+    }
+
+    createViewWindow() {
+        return;
     }
 }
 
@@ -171,11 +185,177 @@ export const onMount = new Event();
 export const state = {
     page: new ObservableState('a'),
     testLoad: new ObservableState(false),
-    tiledWindows: new ObservableState<JQuery[]>([])
+    tiledWindows: new ObservableState<
+        {
+            key: number;
+            window: Widget;
+            visible: boolean;
+            title: string;
+        }[]
+    >([])
 };
 
-export const tutors = new Resource('tutors');
-export const requests = new Resource('requests');
-export const bookings = new Resource('bookings');
-export const matchings = new Resource('matchings');
-export const requestSubmissions = new Resource('requestSubmissions');
+/*
+
+WINDOW-RELATED GLOBAL METHODS
+
+*/
+
+export function addWindow(window: Widget, key: number, title: string) {
+    state.tiledWindows.val.push({
+        key,
+        window,
+        visible: true,
+        title
+    });
+    state.tiledWindows.change.trigger();
+}
+
+export function removeWindow(windowKey: number) {
+    state.tiledWindows.val = state.tiledWindows.val.filter(
+        ({ key }) => key !== windowKey
+    );
+    state.tiledWindows.change.trigger();
+}
+
+export function hideWindow(windowKey: number) {
+    for (const window of state.tiledWindows.val) {
+        if (window.key === windowKey) {
+            window.visible = false;
+        }
+    }
+    state.tiledWindows.change.trigger();
+}
+
+export function showWindow(windowKey: number) {
+    for (const window of state.tiledWindows.val) {
+        if (window.key === windowKey) {
+            window.visible = true;
+        } else {
+            // you can't have two visible windows at once
+            // so, hide all other windows
+            window.visible = false;
+        }
+    }
+}
+
+/*
+
+RESOURCE INSTANTIATIONS
+
+*/
+
+const formConfigNameMap = {
+    firstName: 'First name',
+    lastName: 'Last name',
+    friendlyName: 'Friendly name',
+    friendlyFullName: 'Friendly full name',
+    grade: 'Grade',
+    learner: 'Learner',
+    tutor: 'Tutor',
+    status: 'Status'
+};
+export function makeTutorForm() {
+    return FormWidget(
+        preprocessFormConfig({
+            fields: [...makeBasicStudentConfig()],
+            nameToTitle: formConfigNameMap
+        })
+    );
+}
+export function makeLearnerForm() {
+    return FormWidget(
+        preprocessFormConfig({
+            fields: [...makeBasicStudentConfig()],
+            nameToTitle: formConfigNameMap
+        })
+    );
+}
+export function makeRequestForm() {
+    return FormWidget(
+        preprocessFormConfig({
+            fields: [
+                ['learner', StringField('text')],
+                [
+                    'status',
+                    SelectField(
+                        ['unchecked', 'checked'],
+                        ['Unchecked', 'Checked']
+                    )
+                ]
+            ],
+            nameToTitle: formConfigNameMap
+        })
+    );
+}
+export function makeBookingForm() {
+    return FormWidget(
+        preprocessFormConfig({
+            fields: [
+                ['learner', StringField('text')],
+                ['tutor', StringField('text')],
+                [
+                    'status',
+                    SelectField(
+                        [
+                            'unsent',
+                            'waitingForTutor',
+                            'waitingForLearner',
+                            'finalized',
+                            'rejected',
+                            'rejectedByTutor',
+                            'rejectedByLearner'
+                        ],
+                        [
+                            'Unsent',
+                            'Waiting for tutor',
+                            'Waiting for learner',
+                            'Finalized',
+                            'Rejected',
+                            'Rejected by tutor',
+                            'Rejected by learner'
+                        ]
+                    )
+                ]
+            ],
+            nameToTitle: formConfigNameMap
+        })
+    );
+}
+
+export function makeMatchingForm() {
+    return FormWidget(
+        preprocessFormConfig({
+            fields: [
+                ['learner', StringField('text')],
+                ['tutor', StringField('text')],
+                [
+                    'status',
+                    SelectField(
+                        ['unwritten', 'unsent', 'finalized'],
+                        ['Unwritten', 'Unsent', 'Finalized']
+                    )
+                ]
+            ],
+            nameToTitle: formConfigNameMap
+        })
+    );
+}
+
+export function makeRequestSubmissionForm() {
+    return FormWidget(
+        preprocessFormConfig({
+            fields: [...makeBasicStudentConfig()],
+            nameToTitle: formConfigNameMap
+        })
+    );
+}
+
+export const tutors = new Resource('tutors', makeTutorForm);
+export const requests = new Resource('requests', makeRequestForm);
+export const bookings = new Resource('bookings', makeBookingForm);
+export const matchings = new Resource('matchings', makeMatchingForm);
+export const requestSubmissions = new Resource(
+    'requestSubmissions',
+    makeRequestSubmissionForm
+);

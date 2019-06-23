@@ -1,12 +1,7 @@
 /*
 TODO: badge, dropdown, and search
 */
-import {
-    container,
-    Widget,
-    FunctionalWidget,
-    ObservableState
-} from '../core/shared';
+import { container, Widget, DomWidget, ObservableState } from '../core/shared';
 
 export function SpinnerWidget(
     isLoaded: ObservableState<boolean>,
@@ -27,7 +22,7 @@ export function SpinnerWidget(
         $('<div class="spinner-border"></div>')
     );
 
-    return FunctionalWidget(container('<div></div>')(spinner, child));
+    return DomWidget(container('<div></div>')(spinner, child));
 }
 
 export function ButtonWidget(
@@ -37,7 +32,7 @@ export function ButtonWidget(
 ): Widget {
     // to create an outline button, add "outline" to the variant
     if (variant === 'outline') variant = 'outline-primary';
-    return FunctionalWidget(
+    return DomWidget(
         $('<button></button>')
             .text(text)
             .addClass('btn btn-' + variant)
@@ -75,7 +70,7 @@ export function PillsWidget(
             ).text(value.name);
             onMount.listen(() => dropdown.dropdown());
 
-            return FunctionalWidget(
+            return DomWidget(
                 container('<li class="nav-item dropdown"></li>')(
                     dropdown,
                     container('<div class="dropdown-menu"></div>')(
@@ -91,7 +86,7 @@ export function PillsWidget(
                 )
             );
         } else {
-            return FunctionalWidget(
+            return DomWidget(
                 container('<li class="nav-item"></li>')(
                     $('<a class="nav-link"></a>').text(value.name)
                 ).click(() => {
@@ -113,7 +108,7 @@ export type FormValueWidget = Widget & {
 };
 
 export function FormStringInputWidget(type: string): FormValueWidget {
-    const dom = $(`<input type="text" class="form-control" type="${type}">`);
+    const dom = $(`<input class="form-control" type="${type}">`);
     return {
         dom,
         getValue(): string {
@@ -123,7 +118,7 @@ export function FormStringInputWidget(type: string): FormValueWidget {
 }
 
 export function FormNumberInputWidget(type: string): FormValueWidget {
-    const dom = $(`<input type="text" class="form-control" type="${type}">`);
+    const dom = $(`<input class="form-control" type="${type}">`);
     return {
         dom,
         getValue(): number {
@@ -134,16 +129,32 @@ export function FormNumberInputWidget(type: string): FormValueWidget {
     };
 }
 
+export function StringField(type: string) {
+    return () => FormStringInputWidget(type);
+}
+export function NumberField(type: string) {
+    return () => FormNumberInputWidget(type);
+}
+export function SelectField(options: string[], optionTitles: string[]) {
+    return () => FormSelectWidget(options, optionTitles);
+}
+export type FieldType = () => FormValueWidget;
+
 export function FormSubmitWidget(text: string): Widget {
-    return FunctionalWidget(
+    return DomWidget(
         $(
             '<button class="btn btn-outline-success type="submit"></button>'
         ).text(text)
     );
 }
-export function FormSelectWidget(options: string[]): FormValueWidget {
+export function FormSelectWidget(
+    options: string[],
+    optionTitles: string[]
+): FormValueWidget {
     const dom = container('<select class="form-control"></select>')(
-        options.map(o => container('<option></option>')(o))
+        options.map((o, i) =>
+            container('<option></option>')(o).val(optionTitles[i])
+        )
     );
     return {
         dom,
@@ -153,7 +164,7 @@ export function FormSelectWidget(options: string[]): FormValueWidget {
     };
 }
 export function SearchItemWidget(onSubmit: () => void): Widget {
-    return FunctionalWidget(
+    return DomWidget(
         $('<form class="form-inline"></form>')
             .append(FormStringInputWidget('search').dom)
             .append(FormSubmitWidget('Search').dom)

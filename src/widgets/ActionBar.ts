@@ -1,4 +1,4 @@
-import { FunctionalWidget, container, Widget } from '../core/shared';
+import { DomWidget, container, Widget } from '../core/shared';
 import { ButtonWidget } from './ui';
 
 export type ActionBarConfig = [[string, () => void]];
@@ -12,7 +12,7 @@ export function ActionBarWidget(config: ActionBarConfig): Widget {
             return ButtonWidget('Cancel', handler, 'outline-secondary');
         if (name == 'create') return ButtonWidget('Create', handler, 'outline');
     }
-    return FunctionalWidget(
+    return DomWidget(
         container('<div></div>')(
             config.map(([name, handler]) => makeButton(name, handler))
         )
