@@ -1,11 +1,26 @@
-import { askServer, ServerResponse, Ask, AskStatus } from './server';
-import { LookupAddress } from 'dns';
+import {
+    askServer,
+    ServerResponse,
+    Ask,
+    AskStatus,
+    AskFinished,
+    AskError,
+    AskLoaded
+} from './server';
 import {
     FormWidget,
     preprocessFormConfig,
     makeBasicStudentConfig
 } from '../widgets/Form';
-import { StringField, NumberField, SelectField } from '../widgets/ui';
+import { useTiledWindow } from '../widgets/Window';
+
+import {
+    StringField,
+    NumberField,
+    SelectField,
+    LoaderWidget
+} from '../widgets/ui';
+import { ActionBarWidget } from '../widgets/ActionBar';
 
 /*
 
@@ -77,6 +92,9 @@ export type Record = {
     date: number;
     [others: string]: any;
 };
+export type RecordCollection = {
+    [id: string]: Record;
+};
 
 /*
 
@@ -89,35 +107,35 @@ export class ResourceEndpoint {
     constructor(name: string) {
         this.name = name;
     }
-    async askEndpoint(...partialArgs: any[]): Promise<ServerResponse> {
+    async askEndpoint(...partialArgs: any[]): Promise<ServerResponse<any>> {
         return askServer([this.name].concat(partialArgs));
     }
 
     // NOTE: ALL THESE RETURN PROMISES
 
-    retrieveAll() {
+    retrieveAll(): Promise<ServerResponse<RecordCollection>> {
         return this.askEndpoint('retrieveAll');
     }
-    retrieveDefault() {
+    retrieveDefault(): Promise<ServerResponse<Record>> {
         return this.askEndpoint('retrieveDefault');
     }
-    retrieve(id: number) {
+    retrieve(id: number): Promise<ServerResponse<Record>> {
         return this.askEndpoint('retrieve', id);
     }
-    create(record: object) {
+    create(record: Record): Promise<ServerResponse<undefined>> {
         return this.askEndpoint('create', record);
     }
-    delete(id: number) {
+    delete(id: number): Promise<ServerResponse<undefined>> {
         return this.askEndpoint('delete', id);
     }
-    debug() {
+    debug(): Promise<ServerResponse<any>> {
         return this.askEndpoint('debug');
     }
-    update(record: object) {
+    update(record: Record): Promise<ServerResponse<undefined>> {
         return this.askEndpoint('update', record);
     }
 }
-export class ResourceObservable extends ObservableState<Ask> {
+export class ResourceObservable extends ObservableState<Ask<RecordCollection>> {
     endpoint: ResourceEndpoint;
 
     constructor(endpoint: ResourceEndpoint) {
@@ -126,18 +144,37 @@ export class ResourceObservable extends ObservableState<Ask> {
         });
         this.endpoint = endpoint;
     }
-    async load() {
+    async loadRecordCollection(): Promise<AskFinished<RecordCollection>> {
+        // TODO: the assumption is made here that once the resource is retrieved, it never changes. The real program will (1) declare resource dependencies for each window (2) use an onEdit() event hook server-side to notify the client of any stale data, refreshing windows/widgets as necessary (3) assume that edit locking won't happen, because editing is usually a one-click operation
+        if (
+            this.val.status == AskStatus.ERROR ||
+            this.val.status == AskStatus.LOADED
+        ) {
+            return this.val;
+        }
         const response = await this.endpoint.retrieveAll();
         if (response.error) {
-            this.changeTo({
+            const v: AskError = {
                 status: AskStatus.ERROR,
                 message: response.message
-            });
+            };
+            this.changeTo(v);
+            return v;
         } else {
-            this.changeTo({
+            const v: AskLoaded<RecordCollection> = {
                 status: AskStatus.LOADED,
-                val: response.val as Record[]
-            });
+                val: response.val
+            };
+            this.changeTo(v);
+            return v;
+        }
+    }
+    async dependOnRecordCollection(): Promise<RecordCollection> {
+        const v = await this.loadRecordCollection();
+        if (v.status == AskStatus.ERROR) {
+            throw v.message;
+        } else {
+            return v.val;
         }
     }
 }
@@ -146,9 +183,9 @@ export class Resource {
     name: string;
     endpoint: ResourceEndpoint;
     state: ResourceObservable;
-    makeFormWidget: () => Widget;
+    makeFormWidget: () => FormWidget;
 
-    constructor(name: string, makeFormWidget: () => Widget) {
+    constructor(name: string, makeFormWidget: () => FormWidget) {
         this.name = name;
         this.endpoint = new ResourceEndpoint(this.name);
         this.state = new ResourceObservable(this.endpoint);
@@ -168,8 +205,90 @@ export class Resource {
         }
     }
 
-    createViewWindow() {
-        return;
+    makeTiledViewWindow(id: number): Widget {
+        const loaderWidget = LoaderWidget();
+        const { windowWidget, closeWindow } = useTiledWindow(
+            $('<span>View</span>'),
+            container('<div></div>')(
+                container('<h1></h1>')('View'),
+                loaderWidget.dom
+            ),
+            ActionBarWidget([
+                ['Edit', () => this.makeTiledEditWindow(id)],
+                ['Delete', () => this.makeTiledDeleteWindow(id)],
+                ['Close', () => closeWindow]
+            ]).dom,
+            'View'
+        );
+        this.state
+            .dependOnRecordCollection()
+            .then(v => {
+                const form = this.makeFormWidget();
+                form.setAllValues(v[id]);
+                loaderWidget.onLoaded(form.dom);
+            })
+            .catch(v => {
+                loaderWidget.onError(v);
+            });
+
+        return windowWidget;
+    }
+
+    async makeTiledEditWindow(id: number): Promise<Widget> {
+        const loaderWidget = LoaderWidget();
+        let saveAction: () => void = () => {
+            // You can't save it! It isn't loaded!
+            // (do nothing)
+        };
+
+        const { windowWidget, closeWindow } = useTiledWindow(
+            $('<span>Edit</span>'),
+            container('<div></div>')(
+                container('<h1></h1>')('Edit'),
+                loaderWidget.dom
+            ),
+            ActionBarWidget([
+                ['Save', () => saveAction],
+                ['Cancel', () => closeWindow]
+            ]).dom,
+            'Edit'
+        );
+
+        this.state
+            .dependOnRecordCollection()
+            .then(v => {
+                const form = this.makeFormWidget();
+                form.setAllValues(v[id]);
+                saveAction = () => this.endpoint.update(form.getAllValues());
+                loaderWidget.onLoaded(form.dom);
+            })
+            .catch(v => {
+                loaderWidget.onError(v);
+            });
+
+        return windowWidget;
+    }
+
+    makeTiledDeleteWindow(id: number) {
+        const { windowWidget, closeWindow } = useTiledWindow(
+            $('<span>Delete?</span>'),
+            container('<div></div>')(
+                container('<h1></h1>')('Delete?'),
+                container('<p></p>')('Are you sure you want to delete this?')
+            ),
+            ActionBarWidget([
+                [
+                    'Delete',
+                    () =>
+                        this.endpoint
+                            .delete(id)
+                            .then(() => console.log('Deletion successful!'))
+                ],
+                ['Cancel', () => closeWindow]
+            ]).dom,
+            'Delete?'
+        );
+        return windowWidget;
     }
 }
 

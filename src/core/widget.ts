@@ -1,5 +1,5 @@
 import { container, state, Widget } from './shared';
-import { SpinnerWidget, ButtonWidget } from '../widgets/ui';
+import { LoaderWidget, ButtonWidget } from '../widgets/ui';
 
 const pillsString = `
 <ul class="nav nav-pills">
@@ -47,15 +47,7 @@ export function rootWidget(): Widget {
         ),
         container('<div class="row"></div>')(
             container('<div class="col"></div>')()
-        ),
-        SpinnerWidget(
-            state.testLoad,
-            ButtonWidget(
-                'Clicky clicky!',
-                () => console.log('Hi!'),
-                'outline-danger'
-            ).dom
-        ).dom
+        )
     );
     return { dom };
 }

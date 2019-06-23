@@ -11,7 +11,11 @@ export type UnprocessedFormConfig = {
     nameToTitle: { [name: string]: string };
 };
 
-export function FormWidget(fields: FormFieldConfig[]): Widget {
+export type FormWidget = Widget & {
+    getAllValues(): Record;
+    setAllValues(record: Record): void;
+};
+export function FormWidget(fields: FormFieldConfig[]): FormWidget {
     const widgets = {};
     const dom = container('<form></form>')(
         fields.map(({ title, type, name }) => {
@@ -27,12 +31,12 @@ export function FormWidget(fields: FormFieldConfig[]): Widget {
     );
     return {
         dom,
-        getAllValues(): object {
+        getAllValues(): Record {
             const result = {};
             for (const { name } of fields) {
                 result[name] = widgets[name].getValue();
             }
-            return result;
+            return result as Record;
         },
         setAllValues(values: Record) {
             for (const [name, value] of Object.entries(values)) {

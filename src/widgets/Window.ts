@@ -1,11 +1,11 @@
 import {
     container,
     DomWidget,
-    Widget,
     KeyMaker,
     hideWindow,
     removeWindow,
-    addWindow
+    addWindow,
+    Widget
 } from '../core/shared';
 import { ButtonWidget } from './ui';
 
@@ -35,20 +35,28 @@ function WindowWidget(
     );
 }
 
-export function makeTiledWindow(
+export function useTiledWindow(
     titleBarContent: JQuery,
     content: JQuery,
     actionBarContent: JQuery,
     title: string
-): Widget {
+): {
+    minimizeWindow: () => void;
+    closeWindow: () => void;
+    windowWidget: Widget;
+} {
     const key = windowKeyMaker.makeKey();
-    const widget = WindowWidget(
+    const windowWidget = WindowWidget(
         titleBarContent,
         content,
         actionBarContent,
         () => hideWindow(key),
         () => removeWindow(key)
     );
-    addWindow(widget, key, title);
-    return widget;
+    addWindow(windowWidget, key, title);
+    return {
+        windowWidget,
+        minimizeWindow: () => removeWindow(key),
+        closeWindow: () => hideWindow(key)
+    };
 }

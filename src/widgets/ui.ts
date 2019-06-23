@@ -2,27 +2,30 @@
 TODO: badge, dropdown, and search
 */
 import { container, Widget, DomWidget, ObservableState } from '../core/shared';
+import { AskStatus } from '../core/server';
 
-export function SpinnerWidget(
-    isLoaded: ObservableState<boolean>,
-    child: JQuery
-): Widget {
-    isLoaded.change.listen(() => {
-        if (isLoaded.val) {
-            spinner.hide();
-            child.show();
-        } else {
-            spinner.show();
-            child.hide();
-        }
-    });
-
+export function LoaderWidget() {
     const spinner = container('<div></div>')(
         $('<strong>Loading...</strong>'),
         $('<div class="spinner-border"></div>')
     );
+    const dom = container('<div></div>')(spinner);
+    const onLoaded = (child: JQuery) => {
+        dom.append(child);
+    };
+    const onError = (message: string) => {
+        const errorMessageDom = container(
+            '<div class="alert alert-danger"></div>'
+        )(container('<h1></h1>')('Error'), container('<span></span>')(message));
+        dom.empty();
+        dom.append(errorMessageDom);
+    };
 
-    return DomWidget(container('<div></div>')(spinner, child));
+    return {
+        dom,
+        onLoaded,
+        onError
+    };
 }
 
 export function ButtonWidget(
