@@ -7,26 +7,38 @@ import {
     AskError,
     AskLoaded
 } from './server';
-import {
-    FormWidget,
-    preprocessFormConfig,
-    makeBasicStudentConfig
-} from '../widgets/Form';
+import { FormWidget } from '../widgets/Form';
 import { useTiledWindow } from '../widgets/Window';
 
 import {
     StringField,
     NumberField,
     SelectField,
-    LoaderWidget
+    LoaderWidget,
+    FormFieldType
 } from '../widgets/ui';
 import { ActionBarWidget } from '../widgets/ActionBar';
+
+export function MyTesting() {
+    return 4;
+}
 
 /*
 
 ALL BASIC CLASSES AND BASIC UTILS
 
 */
+
+export function stringifyError(error: any) {
+    console.log(error);
+    if (error instanceof Error) {
+        return JSON.stringify(error, Object.getOwnPropertyNames(error));
+    }
+    if (typeof error === 'object') {
+        return JSON.stringify(error);
+    }
+    return error;
+}
 
 export class Event {
     listeners: (() => any)[];
@@ -47,17 +59,22 @@ export class Event {
     }
 }
 
-export function container(newTag: string): (...children: any[]) => JQuery {
-    return (...children) => $(newTag).append(...children);
-}
-
-export class KeyMaker {
-    private nextKey: number = 0;
-    makeKey(): number {
-        const result = this.nextKey;
-        this.nextKey += 1;
-        return result;
-    }
+export function container(newTag: string) {
+    return (...children: any) => {
+        //console.log('container', newTag, children);
+        if (Array.isArray(children[0])) {
+            return $(newTag).append(
+                children[0].map((x: any) =>
+                    typeof x === 'string' ? $(document.createTextNode(x)) : x
+                )
+            );
+        }
+        return $(newTag).append(
+            children.map((x: any) =>
+                typeof x === 'string' ? $(document.createTextNode(x)) : x
+            )
+        );
+    };
 }
 
 export type Widget = {
@@ -144,6 +161,17 @@ export class ResourceObservable extends ObservableState<Ask<RecordCollection>> {
         });
         this.endpoint = endpoint;
     }
+    getRecordOrFail(id: number) {
+        if (
+            this.val.status == AskStatus.ERROR ||
+            this.val.status == AskStatus.LOADING ||
+            this.val.val[id] === undefined
+        ) {
+            throw new Error('record not available');
+        }
+        return this.val.val[id];
+    }
+
     async loadRecordCollection(): Promise<AskFinished<RecordCollection>> {
         // TODO: the assumption is made here that once the resource is retrieved, it never changes. The real program will (1) declare resource dependencies for each window (2) use an onEdit() event hook server-side to notify the client of any stale data, refreshing windows/widgets as necessary (3) assume that edit locking won't happen, because editing is usually a one-click operation
         if (
@@ -177,96 +205,117 @@ export class ResourceObservable extends ObservableState<Ask<RecordCollection>> {
             return v.val;
         }
     }
+    async updateRecord(record: Record): Promise<AskFinished<null>> {
+        if (this.val.status == AskStatus.ERROR) {
+            return this.val;
+        }
+        if (this.val.status == AskStatus.LOADING) {
+            // shouldn't happen!
+            throw new Error(
+                'attempted to update record before records were loaded'
+            );
+        }
+        const response = await this.endpoint.update(record);
+        if (response.error) {
+            const v: AskError = {
+                status: AskStatus.ERROR,
+                message: response.message
+            };
+            return v;
+        } else {
+            const v: AskLoaded<null> = {
+                status: AskStatus.LOADED,
+                val: null
+            };
+
+            // update the client to match the server (sync)
+            this.val.val[record.id] = record;
+            this.change.trigger();
+
+            return v;
+        }
+    }
 }
 
 export class Resource {
     name: string;
     endpoint: ResourceEndpoint;
     state: ResourceObservable;
-    makeFormWidget: () => FormWidget;
+    info: ResourceInfo;
 
-    constructor(name: string, makeFormWidget: () => FormWidget) {
+    constructor(name: string, info: ResourceInfo) {
         this.name = name;
         this.endpoint = new ResourceEndpoint(this.name);
         this.state = new ResourceObservable(this.endpoint);
-        this.makeFormWidget = makeFormWidget;
+        this.info = info;
+    }
+
+    makeFormWidget() {
+        return FormWidget(this.info.fields);
     }
 
     createMarker(id: number, builder: (record: Record) => JQuery): JQuery {
-        if (this.state.val.status === AskStatus.LOADED) {
-            const record = this.state.val.val.records.filter(
-                (record: Record) => record.id == id
-            )[0];
-            if (record === undefined || record === null)
-                return $('<span>???</span>');
-            return builder(record);
-        } else {
-            return $('<span>???</span>');
-        }
+        const record = this.state.getRecordOrFail(id);
+        return builder(record);
     }
 
-    makeTiledViewWindow(id: number): Widget {
-        const loaderWidget = LoaderWidget();
-        const { windowWidget, closeWindow } = useTiledWindow(
-            $('<span>View</span>'),
+    createLabel(id: number, builder: (record: Record) => string): string {
+        const record = this.state.getRecordOrFail(id);
+        return builder(record);
+    }
+
+    async makeTiledViewWindow(id: number): Promise<void> {
+        let records: RecordCollection = null;
+        try {
+            records = await this.state.dependOnRecordCollection();
+        } catch (err) {
+            alert(stringifyError(err));
+            return;
+        }
+        const form = this.makeFormWidget();
+        form.setAllValues(records[String(id)]);
+        const windowLabel =
+            'View ' + this.createLabel(id, record => record.friendlyFullName);
+        const { closeWindow } = useTiledWindow(
+            container('<span></span>')(windowLabel),
             container('<div></div>')(
-                container('<h1></h1>')('View'),
-                loaderWidget.dom
+                container('<h1></h1>')(windowLabel),
+                form.dom
             ),
             ActionBarWidget([
                 ['Edit', () => this.makeTiledEditWindow(id)],
                 ['Delete', () => this.makeTiledDeleteWindow(id)],
-                ['Close', () => closeWindow]
+                ['Close', () => closeWindow()]
             ]).dom,
-            'View'
+            windowLabel
         );
-        this.state
-            .dependOnRecordCollection()
-            .then(v => {
-                const form = this.makeFormWidget();
-                form.setAllValues(v[id]);
-                loaderWidget.onLoaded(form.dom);
-            })
-            .catch(v => {
-                loaderWidget.onError(v);
-            });
-
-        return windowWidget;
     }
 
-    async makeTiledEditWindow(id: number): Promise<Widget> {
-        const loaderWidget = LoaderWidget();
-        let saveAction: () => void = () => {
-            // You can't save it! It isn't loaded!
-            // (do nothing)
-        };
-
-        const { windowWidget, closeWindow } = useTiledWindow(
-            $('<span>Edit</span>'),
+    async makeTiledEditWindow(id: number): Promise<void> {
+        let records: RecordCollection = null;
+        try {
+            records = await this.state.dependOnRecordCollection();
+        } catch (err) {
+            alert(stringifyError(err));
+            return;
+        }
+        const form = this.makeFormWidget();
+        form.setAllValues(records[String(id)]);
+        const windowLabel =
+            'Edit ' + this.createLabel(id, record => record.friendlyFullName);
+        const { closeWindow } = useTiledWindow(
+            container('<span></span>')(windowLabel),
             container('<div></div>')(
-                container('<h1></h1>')('Edit'),
-                loaderWidget.dom
+                container('<h1></h1>')(windowLabel),
+                form.dom
             ),
             ActionBarWidget([
-                ['Save', () => saveAction],
-                ['Cancel', () => closeWindow]
+                ['Delete', () => this.makeTiledDeleteWindow(id)],
+                ['Save', () => this.endpoint.update(form.getAllValues())],
+                ['Close', () => closeWindow()]
             ]).dom,
-            'Edit'
+            windowLabel
         );
-
-        this.state
-            .dependOnRecordCollection()
-            .then(v => {
-                const form = this.makeFormWidget();
-                form.setAllValues(v[id]);
-                saveAction = () => this.endpoint.update(form.getAllValues());
-                loaderWidget.onLoaded(form.dom);
-            })
-            .catch(v => {
-                loaderWidget.onError(v);
-            });
-
-        return windowWidget;
     }
 
     makeTiledDeleteWindow(id: number) {
@@ -282,7 +331,7 @@ export class Resource {
                     () =>
                         this.endpoint
                             .delete(id)
-                            .then(() => console.log('Deletion successful!'))
+                            .then(() => alert('Deletion successful!'))
                 ],
                 ['Cancel', () => closeWindow]
             ]).dom,
@@ -302,8 +351,6 @@ export const onReady = new Event();
 export const onMount = new Event();
 
 export const state = {
-    page: new ObservableState('a'),
-    testLoad: new ObservableState(false),
     tiledWindows: new ObservableState<
         {
             key: number;
@@ -320,13 +367,22 @@ WINDOW-RELATED GLOBAL METHODS
 
 */
 
-export function addWindow(window: Widget, key: number, title: string) {
+export function addWindow(window: Widget, windowKey: number, title: string) {
     state.tiledWindows.val.push({
-        key,
+        key: windowKey,
         window,
         visible: true,
         title
     });
+    for (const window of state.tiledWindows.val) {
+        if (window.key === windowKey) {
+            window.visible = true;
+        } else {
+            // you can't have two visible windows at once
+            // so, hide all other windows
+            window.visible = false;
+        }
+    }
     state.tiledWindows.change.trigger();
 }
 
@@ -356,15 +412,68 @@ export function showWindow(windowKey: number) {
             window.visible = false;
         }
     }
+    state.tiledWindows.change.trigger();
 }
 
 /*
 
-RESOURCE INSTANTIATIONS
+RESOURCE INFO
 
 */
 
-const formConfigNameMap = {
+export type ResourceFieldInfo = {
+    title: string;
+    name: string;
+    type: FormFieldType;
+};
+
+export type ResourceInfo = {
+    fields: ResourceFieldInfo[];
+};
+
+export function processResourceInfo(
+    conf: UnprocessedResourceInfo
+): ResourceInfo {
+    let fields: ResourceFieldInfo[] = [];
+    for (const [name, type] of conf.fields) {
+        fields.push({
+            title: conf.fieldNameMap[name],
+            name,
+            type
+        });
+    }
+    fields = fields.concat([
+        {
+            title: 'ID',
+            name: 'id',
+            type: NumberField('number')
+        },
+        {
+            title: 'Date',
+            name: 'date',
+            type: NumberField('datetime-local')
+        }
+    ]);
+    return { fields };
+}
+
+export type UnprocessedResourceInfo = {
+    fields: [string, FormFieldType][]; // name, string/number, type
+    fieldNameMap: { [name: string]: string };
+    tableFields: string[];
+};
+
+export function makeBasicStudentConfig(): [string, FormFieldType][] {
+    return [
+        ['firstName', StringField('text')],
+        ['lastName', StringField('text')],
+        ['friendlyName', StringField('text')],
+        ['friendlyFullName', StringField('text')],
+        ['grade', NumberField('number')]
+    ];
+}
+
+const fieldNameMap = {
     firstName: 'First name',
     lastName: 'Last name',
     friendlyName: 'Friendly name',
@@ -374,107 +483,100 @@ const formConfigNameMap = {
     tutor: 'Tutor',
     status: 'Status'
 };
-export function makeTutorForm() {
-    return FormWidget(
-        preprocessFormConfig({
-            fields: [...makeBasicStudentConfig()],
-            nameToTitle: formConfigNameMap
-        })
-    );
-}
-export function makeLearnerForm() {
-    return FormWidget(
-        preprocessFormConfig({
-            fields: [...makeBasicStudentConfig()],
-            nameToTitle: formConfigNameMap
-        })
-    );
-}
-export function makeRequestForm() {
-    return FormWidget(
-        preprocessFormConfig({
-            fields: [
-                ['learner', StringField('text')],
-                [
-                    'status',
-                    SelectField(
-                        ['unchecked', 'checked'],
-                        ['Unchecked', 'Checked']
-                    )
-                ]
-            ],
-            nameToTitle: formConfigNameMap
-        })
-    );
-}
-export function makeBookingForm() {
-    return FormWidget(
-        preprocessFormConfig({
-            fields: [
-                ['learner', StringField('text')],
-                ['tutor', StringField('text')],
-                [
-                    'status',
-                    SelectField(
-                        [
-                            'unsent',
-                            'waitingForTutor',
-                            'waitingForLearner',
-                            'finalized',
-                            'rejected',
-                            'rejectedByTutor',
-                            'rejectedByLearner'
-                        ],
-                        [
-                            'Unsent',
-                            'Waiting for tutor',
-                            'Waiting for learner',
-                            'Finalized',
-                            'Rejected',
-                            'Rejected by tutor',
-                            'Rejected by learner'
-                        ]
-                    )
-                ]
-            ],
-            nameToTitle: formConfigNameMap
-        })
-    );
-}
+export const tutorsInfo: UnprocessedResourceInfo = {
+    fields: [...makeBasicStudentConfig()],
+    fieldNameMap,
+    tableFields: ['friendlyFullName', 'grade']
+};
+export const learnersInfo: UnprocessedResourceInfo = {
+    fields: [...makeBasicStudentConfig()],
+    fieldNameMap,
+    tableFields: ['friendlyFullName', 'grade']
+};
+export const requestsInfo: UnprocessedResourceInfo = {
+    fields: [
+        ['learner', NumberField('id')],
+        [
+            'status',
+            SelectField(['unchecked', 'checked'], ['Unchecked', 'Checked'])
+        ]
+    ],
+    fieldNameMap,
+    tableFields: ['learner', 'status']
+};
 
-export function makeMatchingForm() {
-    return FormWidget(
-        preprocessFormConfig({
-            fields: [
-                ['learner', StringField('text')],
-                ['tutor', StringField('text')],
+export const bookingsInfo: UnprocessedResourceInfo = {
+    fields: [
+        ['learner', StringField('text')],
+        ['tutor', StringField('text')],
+        [
+            'status',
+            SelectField(
                 [
-                    'status',
-                    SelectField(
-                        ['unwritten', 'unsent', 'finalized'],
-                        ['Unwritten', 'Unsent', 'Finalized']
-                    )
+                    'unsent',
+                    'waitingForTutor',
+                    'waitingForLearner',
+                    'finalized',
+                    'rejected',
+                    'rejectedByTutor',
+                    'rejectedByLearner'
+                ],
+                [
+                    'Unsent',
+                    'Waiting for tutor',
+                    'Waiting for learner',
+                    'Finalized',
+                    'Rejected',
+                    'Rejected by tutor',
+                    'Rejected by learner'
                 ]
-            ],
-            nameToTitle: formConfigNameMap
-        })
-    );
-}
+            )
+        ]
+    ],
+    fieldNameMap,
+    tableFields: ['learner', 'tutor', 'status']
+};
 
-export function makeRequestSubmissionForm() {
-    return FormWidget(
-        preprocessFormConfig({
-            fields: [...makeBasicStudentConfig()],
-            nameToTitle: formConfigNameMap
-        })
-    );
-}
+export const matchingsInfo: UnprocessedResourceInfo = {
+    fields: [
+        ['learner', StringField('text')],
+        ['tutor', StringField('text')],
+        [
+            'status',
+            SelectField(
+                ['unwritten', 'unsent', 'finalized'],
+                ['Unwritten', 'Unsent', 'Finalized']
+            )
+        ]
+    ],
+    fieldNameMap,
+    tableFields: ['learner', 'tutor', 'status']
+};
 
-export const tutors = new Resource('tutors', makeTutorForm);
-export const requests = new Resource('requests', makeRequestForm);
-export const bookings = new Resource('bookings', makeBookingForm);
-export const matchings = new Resource('matchings', makeMatchingForm);
+export const requestSubmissionsInfo: UnprocessedResourceInfo = {
+    fields: [...makeBasicStudentConfig()],
+    fieldNameMap,
+    tableFields: ['friendlyFullName']
+};
+
+export const tutors = new Resource('tutors', processResourceInfo(tutorsInfo));
+export const learners = new Resource(
+    'tutors',
+    processResourceInfo(learnersInfo)
+);
+export const requests = new Resource(
+    'requests',
+    processResourceInfo(requestsInfo)
+);
+export const bookings = new Resource(
+    'bookings',
+    processResourceInfo(bookingsInfo)
+);
+export const matchings = new Resource(
+    'matchings',
+    processResourceInfo(matchingsInfo)
+);
 export const requestSubmissions = new Resource(
     'requestSubmissions',
-    makeRequestSubmissionForm
+    processResourceInfo(requestSubmissionsInfo)
 );

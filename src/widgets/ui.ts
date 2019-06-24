@@ -11,6 +11,7 @@ export function LoaderWidget() {
     );
     const dom = container('<div></div>')(spinner);
     const onLoaded = (child: JQuery) => {
+        dom.empty();
         dom.append(child);
     };
     const onError = (message: string) => {
@@ -106,28 +107,55 @@ export function PillsWidget(
     return { dom };
 }*/
 
-export type FormValueWidget = Widget & {
+export type FormValueWidget<T> = Widget & {
     getValue(): any;
+    setValue(newVal: T): JQuery;
 };
 
-export function FormStringInputWidget(type: string): FormValueWidget {
+export function FormStringInputWidget(type: string): FormValueWidget<string> {
     const dom = $(`<input class="form-control" type="${type}">`);
     return {
         dom,
         getValue(): string {
             return String(dom.val());
+        },
+        setValue(newVal: string): JQuery {
+            return dom.val(newVal);
         }
     };
 }
 
-export function FormNumberInputWidget(type: string): FormValueWidget {
-    const dom = $(`<input class="form-control" type="${type}">`);
+export function FormNumberInputWidget(type: string): FormValueWidget<number> {
+    let dom: JQuery = null;
+    if (type === 'number') {
+        dom = $(`<input class="form-control" type="number">`);
+    }
+    if (type === 'datetime-local') {
+        dom = $(`<input class="form-control" type="datetime-local">`);
+    }
+    if (type === 'id') {
+        // TODO: create a resource selection dropdown, or at least a name search
+        dom = $(`<input class="form-control" type="number">`);
+    }
     return {
         dom,
         getValue(): number {
-            if (type == 'datetime-local')
-                return new Date(String(dom.val())).getTime();
+            if (type == 'datetime-local') {
+                // a hack to get around Typescript types
+                const htmlEl: any = dom.get(0);
+                const date = htmlEl.valueAsNumber as number;
+                return date ? date : 0;
+            }
             return Number(dom.val());
+        },
+        setValue(val: number): JQuery {
+            if (type == 'datetime-local') {
+                // a hack to get around Typescript types
+                const htmlEl: any = dom.get(0);
+                htmlEl.valueAsNumber = val;
+                return dom;
+            }
+            return dom.val(val);
         }
     };
 }
@@ -141,7 +169,7 @@ export function NumberField(type: string) {
 export function SelectField(options: string[], optionTitles: string[]) {
     return () => FormSelectWidget(options, optionTitles);
 }
-export type FieldType = () => FormValueWidget;
+export type FormFieldType = () => FormValueWidget<any>;
 
 export function FormSubmitWidget(text: string): Widget {
     return DomWidget(
@@ -153,7 +181,7 @@ export function FormSubmitWidget(text: string): Widget {
 export function FormSelectWidget(
     options: string[],
     optionTitles: string[]
-): FormValueWidget {
+): FormValueWidget<string> {
     const dom = container('<select class="form-control"></select>')(
         options.map((o, i) =>
             container('<option></option>')(o).val(optionTitles[i])
@@ -163,6 +191,9 @@ export function FormSelectWidget(
         dom,
         getValue(): string {
             return dom.val() as string;
+        },
+        setValue(val: string): JQuery {
+            return dom.val(val);
         }
     };
 }

@@ -7,15 +7,16 @@ export function TilingWindowManagerWidget(): Widget {
 
     tiledWindows.change.listen(() => {
         // STEP A: REMOVE/ADD WINDOWS
-        const val = tiledWindows.val;
-        const usedKeys = {};
-        for (const { key } of val) usedKeys[key] = true;
+        const state = tiledWindows.val;
+
+        // The windows we want to keep are the ones in the state.
+        const windowsToKeep = {};
+        for (const { key } of state) windowsToKeep[key] = true;
 
         let childIndex = 0;
         while (childIndex < dom.children().length) {
-            if (!usedKeys[domWindowKeys[childIndex]]) {
-                // remove this child, because it's not in usedKeys
-                // we do NOT increment childIndex
+            if (!windowsToKeep[domWindowKeys[childIndex]]) {
+                // remove this child: we do NOT increment childIndex
                 // because the next child will take the place of the
                 // current one
                 dom.children()[childIndex].remove();
@@ -29,18 +30,23 @@ export function TilingWindowManagerWidget(): Widget {
         }
 
         // we assume there might be ONE new window at the end of tiledWindows
-        if (!usedKeys[val[val.length - 1].key]) {
-            // add it in to the end!
-            dom.append(val[val.length - 1].window.dom);
+        if (state.length > 0) {
+            const windowsInDom = {};
+            for (const key of domWindowKeys) windowsInDom[key] = true;
 
-            // this resyncs domWindowKeys with the DOM
-            domWindowKeys.push(val[val.length - 1].key);
+            if (!windowsInDom[state[state.length - 1].key]) {
+                // add it in to the end!
+                dom.append(state[state.length - 1].window.dom);
+
+                // this resyncs domWindowKeys with the DOM
+                domWindowKeys.push(state[state.length - 1].key);
+            }
         }
 
         // STEP B: SET VISIBILITIES
         // By now, we assume that domWindowKeys and tiledWindows are in sync
-        for (let i = 0; i < val.length; ++i) {
-            if (val[i].visible) {
+        for (let i = 0; i < state.length; ++i) {
+            if (state[i].visible) {
                 $(dom.children()[i]).show();
             } else {
                 $(dom.children()[i]).hide();

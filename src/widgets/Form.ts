@@ -1,22 +1,12 @@
-import { container, Widget, Record } from '../core/shared';
-import { NumberField, FieldType, StringField } from './ui';
-
-export type FormFieldConfig = {
-    title: string;
-    name: string;
-    type: FieldType;
-};
-export type UnprocessedFormConfig = {
-    fields: [string, FieldType][];
-    nameToTitle: { [name: string]: string };
-};
+import { container, Widget, Record, ResourceFieldInfo } from '../core/shared';
+import { FormValueWidget } from './ui';
 
 export type FormWidget = Widget & {
     getAllValues(): Record;
     setAllValues(record: Record): void;
 };
-export function FormWidget(fields: FormFieldConfig[]): FormWidget {
-    const widgets = {};
+export function FormWidget(fields: ResourceFieldInfo[]): FormWidget {
+    const widgets: { [fieldName: string]: FormValueWidget<any> } = {};
     const dom = container('<form></form>')(
         fields.map(({ title, type, name }) => {
             const widget = type();
@@ -25,7 +15,7 @@ export function FormWidget(fields: FormFieldConfig[]): FormWidget {
                 container('<label class="col-2 col-form-label"></label>')(
                     title
                 ),
-                container('<div class="col-10"')(widget.dom)
+                container('<div class="col-10"></div>')(widget.dom)
             );
         })
     );
@@ -40,42 +30,8 @@ export function FormWidget(fields: FormFieldConfig[]): FormWidget {
         },
         setAllValues(values: Record) {
             for (const [name, value] of Object.entries(values)) {
-                $(widgets[name]).val(value);
+                widgets[name].setValue(value);
             }
         }
     };
-}
-
-export function preprocessFormConfig(conf: UnprocessedFormConfig) {
-    const processed = [];
-    for (const [name, type] of conf.fields) {
-        processed.push({
-            title: conf.nameToTitle[name],
-            name,
-            type
-        });
-    }
-    processed.concat([
-        {
-            title: 'id',
-            name: 'ID',
-            type: NumberField('number')
-        },
-        {
-            title: 'date',
-            name: 'Date',
-            type: StringField('date')
-        }
-    ]);
-    return processed;
-}
-
-export function makeBasicStudentConfig(): [string, FieldType][] {
-    return [
-        ['firstName', StringField('text')],
-        ['lastName', StringField('text')],
-        ['friendlyName', StringField('text')],
-        ['friendlyFullName', StringField('text')],
-        ['grade', NumberField('number')]
-    ];
 }
