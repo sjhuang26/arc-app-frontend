@@ -16,8 +16,10 @@ export function ActionBarWidget(config: ActionBarConfig): Widget {
         throw new Error('button not supported');
     }
     return DomWidget(
-        container('<div></div>')(
-            config.map(([name, handler]) => makeButton(name, handler).dom)
+        container('<div class="d-flex justify-content-end"></div>')(
+            config.map(([name, handler]) =>
+                makeButton(name, handler).dom.addClass('ml-2')
+            )
         )
     );
 }

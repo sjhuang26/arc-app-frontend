@@ -4,7 +4,9 @@ import {
     hideWindow,
     removeWindow,
     addWindow,
-    Widget
+    Widget,
+    state,
+    Event
 } from '../core/shared';
 import { ButtonWidget } from './ui';
 
@@ -21,50 +23,33 @@ const windowKeyMaker = new KeyMaker();
 
 // Assume that all windows are tiled. So all WindowWidgets will be made from makeTiledWindow().
 
-function WindowWidget(
-    titleBarContent: JQuery,
-    content: JQuery,
-    actionBarContent: JQuery,
-    minimizeWindow: () => void,
-    closeWindow: () => void
-): Widget {
+function WindowWidget(content: JQuery, actionBarContent: JQuery): Widget {
     return DomWidget(
-        container('<div class="card"></div>')(
-            container('<div class="card-header"></div>')(
-                container('<div></div>')(titleBarContent),
-                container('<div></div>')(
-                    ButtonWidget('Minimize', minimizeWindow, 'outline').dom,
-                    ButtonWidget('Close', closeWindow, 'outline').dom
-                )
-            ),
-            container('<div class="card-body"></div>')(content),
-            container('<div class="card-footer"></div>')(actionBarContent)
+        container('<div class="card m-3"></div>')(
+            container('<div class="card-header"></div>')(actionBarContent),
+            container('<div class="card-body"></div>')(content)
         )
     );
 }
 
 export function useTiledWindow(
-    titleBarContent: JQuery,
     content: JQuery,
     actionBarContent: JQuery,
-    title: string
+    title: string,
+    onLoad: Event = new Event()
 ): {
     minimizeWindow: () => void;
     closeWindow: () => void;
     windowWidget: Widget;
+    onLoad: Event;
 } {
     const key = windowKeyMaker.makeKey();
-    const windowWidget = WindowWidget(
-        titleBarContent,
-        content,
-        actionBarContent,
-        () => hideWindow(key),
-        () => removeWindow(key)
-    );
-    addWindow(windowWidget, key, title);
+    const windowWidget = WindowWidget(content, actionBarContent);
+    addWindow(windowWidget, key, title, onLoad);
     return {
         windowWidget,
-        minimizeWindow: () => removeWindow(key),
-        closeWindow: () => hideWindow(key)
+        minimizeWindow: () => hideWindow(key),
+        closeWindow: () => removeWindow(key),
+        onLoad
     };
 }

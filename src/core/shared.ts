@@ -5,7 +5,9 @@ import {
     AskStatus,
     AskFinished,
     AskError,
-    AskLoaded
+    AskLoaded,
+    convertServerResponseToAskFinished,
+    getResultOrFail
 } from './server';
 import { FormWidget } from '../widgets/Form';
 import { useTiledWindow } from '../widgets/Window';
@@ -14,10 +16,11 @@ import {
     StringField,
     NumberField,
     SelectField,
-    LoaderWidget,
-    FormFieldType
+    FormFieldType,
+    ErrorWidget
 } from '../widgets/ui';
 import { ActionBarWidget } from '../widgets/ActionBar';
+import { TableWidget } from '../widgets/Table';
 
 export function MyTesting() {
     return 4;
@@ -30,7 +33,7 @@ ALL BASIC CLASSES AND BASIC UTILS
 */
 
 export function stringifyError(error: any) {
-    console.log(error);
+    console.error(error);
     if (error instanceof Error) {
         return JSON.stringify(error, Object.getOwnPropertyNames(error));
     }
@@ -61,7 +64,6 @@ export class Event {
 
 export function container(newTag: string) {
     return (...children: any) => {
-        //console.log('container', newTag, children);
         if (Array.isArray(children[0])) {
             return $(newTag).append(
                 children[0].map((x: any) =>
@@ -124,31 +126,31 @@ export class ResourceEndpoint {
     constructor(name: string) {
         this.name = name;
     }
-    async askEndpoint(...partialArgs: any[]): Promise<ServerResponse<any>> {
+    async askEndpoint(...partialArgs: any[]): Promise<AskFinished<any>> {
         return askServer([this.name].concat(partialArgs));
     }
 
     // NOTE: ALL THESE RETURN PROMISES
 
-    retrieveAll(): Promise<ServerResponse<RecordCollection>> {
+    retrieveAll(): Promise<AskFinished<RecordCollection>> {
         return this.askEndpoint('retrieveAll');
     }
-    retrieveDefault(): Promise<ServerResponse<Record>> {
+    retrieveDefault(): Promise<AskFinished<Record>> {
         return this.askEndpoint('retrieveDefault');
     }
-    retrieve(id: number): Promise<ServerResponse<Record>> {
+    retrieve(id: number): Promise<AskFinished<Record>> {
         return this.askEndpoint('retrieve', id);
     }
-    create(record: Record): Promise<ServerResponse<undefined>> {
+    create(record: Record): Promise<AskFinished<void>> {
         return this.askEndpoint('create', record);
     }
-    delete(id: number): Promise<ServerResponse<undefined>> {
+    delete(id: number): Promise<AskFinished<void>> {
         return this.askEndpoint('delete', id);
     }
-    debug(): Promise<ServerResponse<any>> {
+    debug(): Promise<AskFinished<any>> {
         return this.askEndpoint('debug');
     }
-    update(record: Record): Promise<ServerResponse<undefined>> {
+    update(record: Record): Promise<AskFinished<void>> {
         return this.askEndpoint('update', record);
     }
 }
@@ -162,14 +164,18 @@ export class ResourceObservable extends ObservableState<Ask<RecordCollection>> {
         this.endpoint = endpoint;
     }
     getRecordOrFail(id: number) {
-        if (
-            this.val.status == AskStatus.ERROR ||
-            this.val.status == AskStatus.LOADING ||
-            this.val.val[id] === undefined
-        ) {
+        const val = this.getLoadedOrFail();
+        if (val[String(id)] === undefined) {
             throw new Error('record not available');
         }
-        return this.val.val[id];
+        return val[String(id)];
+    }
+
+    getLoadedOrFail(): RecordCollection {
+        if (this.val.status != AskStatus.LOADED) {
+            throw new Error('resource is not loaded');
+        }
+        return this.val.val;
     }
 
     async loadRecordCollection(): Promise<AskFinished<RecordCollection>> {
@@ -180,24 +186,21 @@ export class ResourceObservable extends ObservableState<Ask<RecordCollection>> {
         ) {
             return this.val;
         }
-        const response = await this.endpoint.retrieveAll();
-        if (response.error) {
-            const v: AskError = {
-                status: AskStatus.ERROR,
-                message: response.message
-            };
-            this.changeTo(v);
-            return v;
-        } else {
-            const v: AskLoaded<RecordCollection> = {
-                status: AskStatus.LOADED,
-                val: response.val
-            };
-            this.changeTo(v);
-            return v;
-        }
+        const newVal: AskFinished<
+            RecordCollection
+        > = await this.endpoint.retrieveAll();
+        this.changeTo(newVal);
+        return newVal;
     }
-    async dependOnRecordCollection(): Promise<RecordCollection> {
+
+    async forceRefresh(): Promise<void> {
+        const newVal: AskFinished<
+            RecordCollection
+        > = await this.endpoint.retrieveAll();
+        this.changeTo(newVal);
+    }
+
+    async dependOnRecordCollectionOrFail(): Promise<RecordCollection> {
         const v = await this.loadRecordCollection();
         if (v.status == AskStatus.ERROR) {
             throw v.message;
@@ -205,34 +208,40 @@ export class ResourceObservable extends ObservableState<Ask<RecordCollection>> {
             return v.val;
         }
     }
-    async updateRecord(record: Record): Promise<AskFinished<null>> {
-        if (this.val.status == AskStatus.ERROR) {
-            return this.val;
-        }
-        if (this.val.status == AskStatus.LOADING) {
-            // shouldn't happen!
-            throw new Error(
-                'attempted to update record before records were loaded'
-            );
-        }
-        const response = await this.endpoint.update(record);
-        if (response.error) {
-            const v: AskError = {
-                status: AskStatus.ERROR,
-                message: response.message
-            };
-            return v;
-        } else {
-            const v: AskLoaded<null> = {
-                status: AskStatus.LOADED,
-                val: null
-            };
+    async dependOnRecordOrFail(id: number): Promise<Record> {
+        await this.dependOnRecordCollectionOrFail();
+        return this.getRecordOrFail(id);
+    }
 
+    async updateRecord(record: Record): Promise<AskFinished<void>> {
+        const ask = await this.endpoint.update(record);
+        if (ask.status == AskStatus.LOADED) {
             // update the client to match the server (sync)
-            this.val.val[record.id] = record;
+            this.val[String(record.id)] = record;
             this.change.trigger();
+        }
 
-            return v;
+        return ask;
+    }
+
+    onServerNotificationUpdate(record: Record) {
+        if (this.val.status === AskStatus.LOADED) {
+            this.val.val[String(record.id)] = record;
+            this.change.trigger();
+        }
+    }
+
+    onServerNotificationCreate(record: Record) {
+        if (this.val.status === AskStatus.LOADED) {
+            this.val.val[String(record.id)] = record;
+            this.change.trigger();
+        }
+    }
+
+    onServerNotificationDelete(id: number) {
+        if (this.val.status === AskStatus.LOADED) {
+            delete this.val.val[String(id)];
+            this.change.trigger();
         }
     }
 }
@@ -255,8 +264,22 @@ export class Resource {
     }
 
     createMarker(id: number, builder: (record: Record) => JQuery): JQuery {
-        const record = this.state.getRecordOrFail(id);
-        return builder(record);
+        const dom = container('<a style="cursor: pointer"></a>')(
+            `??? ${this.info.title} (LOADING)`
+        );
+        this.state
+            .dependOnRecordOrFail(id)
+            .then(record => {
+                dom.empty();
+                dom.append(builder(record)).click(() =>
+                    this.makeTiledEditWindow(id)
+                );
+            })
+            .catch(err => {
+                console.error(err);
+                dom.text(`??? ${this.info.title} (ERROR)`);
+            });
+        return dom;
     }
 
     createLabel(id: number, builder: (record: Record) => string): string {
@@ -264,63 +287,141 @@ export class Resource {
         return builder(record);
     }
 
-    async makeTiledViewWindow(id: number): Promise<void> {
-        let records: RecordCollection = null;
+    // The edit window is kind of combined with the view window.
+    async makeTiledEditWindow(id: number): Promise<void> {
+        let record: Record = null;
+        let errorMessage: string = '';
+        let windowLabel: string = 'ERROR in: ' + this.info.title + ' #' + id;
         try {
-            records = await this.state.dependOnRecordCollection();
+            function capitalizeWord(w: string) {
+                return w.charAt(0).toUpperCase() + w.slice(1);
+            }
+
+            await this.state.dependOnRecordCollectionOrFail();
+            record = this.state.getRecordOrFail(id);
+            windowLabel = windowLabel =
+                capitalizeWord(this.info.title) +
+                ': ' +
+                this.createLabel(id, record => record.friendlyFullName);
+
+            const form = this.makeFormWidget();
+            form.setAllValues(record);
+
+            const { closeWindow } = useTiledWindow(
+                container('<div></div>')(
+                    container('<h1></h1>')(windowLabel),
+                    form.dom
+                ),
+                ActionBarWidget([
+                    ['Delete', () => this.makeTiledDeleteWindow(id)],
+                    ['Save', () => this.endpoint.update(form.getAllValues())],
+                    ['Close', () => closeWindow()]
+                ]).dom,
+                windowLabel
+            );
         } catch (err) {
-            alert(stringifyError(err));
-            return;
+            errorMessage = stringifyError(err);
+            const { closeWindow } = useTiledWindow(
+                ErrorWidget(errorMessage).dom,
+                ActionBarWidget([['Close', () => closeWindow()]]).dom,
+                windowLabel
+            );
         }
-        const form = this.makeFormWidget();
-        form.setAllValues(records[String(id)]);
-        const windowLabel =
-            'View ' + this.createLabel(id, record => record.friendlyFullName);
-        const { closeWindow } = useTiledWindow(
-            container('<span></span>')(windowLabel),
-            container('<div></div>')(
-                container('<h1></h1>')(windowLabel),
-                form.dom
-            ),
-            ActionBarWidget([
-                ['Edit', () => this.makeTiledEditWindow(id)],
-                ['Delete', () => this.makeTiledDeleteWindow(id)],
-                ['Close', () => closeWindow()]
-            ]).dom,
-            windowLabel
-        );
     }
 
-    async makeTiledEditWindow(id: number): Promise<void> {
-        let records: RecordCollection = null;
+    async makeTiledCreateWindow(): Promise<void> {
+        let record: Record = null;
+        let errorMessage: string = '';
+        let windowLabel: string = 'ERROR in: create new ' + this.info.title;
         try {
-            records = await this.state.dependOnRecordCollection();
+            await this.state.dependOnRecordCollectionOrFail();
+            record = getResultOrFail(await this.endpoint.retrieveDefault());
+            windowLabel = 'Create new ' + this.info.title;
+
+            const form = this.makeFormWidget();
+            form.setAllValues(record);
+
+            const { closeWindow } = useTiledWindow(
+                container('<div></div>')(
+                    container('<h1></h1>')(windowLabel),
+                    form.dom
+                ),
+                ActionBarWidget([
+                    [
+                        'Create',
+                        async () => {
+                            await this.endpoint.create(form.getAllValues());
+                            closeWindow();
+                        }
+                    ],
+                    ['Close', () => closeWindow()]
+                ]).dom,
+                windowLabel
+            );
         } catch (err) {
-            alert(stringifyError(err));
-            return;
+            errorMessage = stringifyError(err);
+            const { closeWindow } = useTiledWindow(
+                ErrorWidget(errorMessage).dom,
+                ActionBarWidget([['Close', () => closeWindow()]]).dom,
+                windowLabel
+            );
         }
-        const form = this.makeFormWidget();
-        form.setAllValues(records[String(id)]);
-        const windowLabel =
-            'Edit ' + this.createLabel(id, record => record.friendlyFullName);
-        const { closeWindow } = useTiledWindow(
-            container('<span></span>')(windowLabel),
-            container('<div></div>')(
-                container('<h1></h1>')(windowLabel),
-                form.dom
-            ),
-            ActionBarWidget([
-                ['Delete', () => this.makeTiledDeleteWindow(id)],
-                ['Save', () => this.endpoint.update(form.getAllValues())],
-                ['Close', () => closeWindow()]
-            ]).dom,
-            windowLabel
-        );
+    }
+
+    async makeTiledViewAllWindow(): Promise<void> {
+        let recordCollection: RecordCollection = null;
+        let errorMessage: string = '';
+        let windowLabel: string = 'ERROR in: view all ' + this.info.pluralTitle;
+        try {
+            const onLoad = new Event();
+
+            recordCollection = await this.state.dependOnRecordCollectionOrFail();
+
+            const table = TableWidget(
+                this.info.tableFields,
+                this.info.makeTableRowContent
+            );
+
+            onLoad.listen(() => {
+                recordCollection = this.state.getLoadedOrFail();
+                table.setAllValues(recordCollection);
+            });
+
+            windowLabel = 'View all ' + this.info.pluralTitle;
+
+            const { closeWindow } = useTiledWindow(
+                container('<div></div>')(
+                    container('<h1></h1>')(windowLabel),
+                    table.dom
+                ),
+                ActionBarWidget([
+                    ['Create', () => this.makeTiledCreateWindow()],
+                    ['Close', () => closeWindow()]
+                ]).dom,
+                windowLabel,
+                onLoad
+            );
+        } catch (err) {
+            errorMessage = stringifyError(err);
+            const { closeWindow } = useTiledWindow(
+                ErrorWidget(errorMessage).dom,
+                ActionBarWidget([
+                    ['Create', () => this.makeTiledCreateWindow()],
+                    ['Close', () => closeWindow()]
+                ]).dom,
+                windowLabel
+            );
+        }
     }
 
     makeTiledDeleteWindow(id: number) {
+        const windowLabel =
+            'Delete this ' +
+            this.info.title +
+            '? (' +
+            this.createLabel(id, record => record.friendlyFullName) +
+            ')';
         const { windowWidget, closeWindow } = useTiledWindow(
-            $('<span>Delete?</span>'),
             container('<div></div>')(
                 container('<h1></h1>')('Delete?'),
                 container('<p></p>')('Are you sure you want to delete this?')
@@ -335,7 +436,7 @@ export class Resource {
                 ],
                 ['Cancel', () => closeWindow]
             ]).dom,
-            'Delete?'
+            windowLabel
         );
         return windowWidget;
     }
@@ -357,6 +458,7 @@ export const state = {
             window: Widget;
             visible: boolean;
             title: string;
+            onLoad: Event;
         }[]
     >([])
 };
@@ -367,12 +469,18 @@ WINDOW-RELATED GLOBAL METHODS
 
 */
 
-export function addWindow(window: Widget, windowKey: number, title: string) {
+export function addWindow(
+    window: Widget,
+    windowKey: number,
+    title: string,
+    onLoad: Event
+) {
     state.tiledWindows.val.push({
         key: windowKey,
         window,
         visible: true,
-        title
+        title,
+        onLoad
     });
     for (const window of state.tiledWindows.val) {
         if (window.key === windowKey) {
@@ -384,9 +492,17 @@ export function addWindow(window: Widget, windowKey: number, title: string) {
         }
     }
     state.tiledWindows.change.trigger();
+    onLoad.trigger();
 }
 
 export function removeWindow(windowKey: number) {
+    // MEMORY LEAK PREVENTION: explicitly null out the onLoad event when the whole window is deleted
+    for (const window of state.tiledWindows.val) {
+        if (window.key === windowKey) {
+            window.onLoad = null;
+        }
+    }
+
     state.tiledWindows.val = state.tiledWindows.val.filter(
         ({ key }) => key !== windowKey
     );
@@ -413,6 +529,13 @@ export function showWindow(windowKey: number) {
         }
     }
     state.tiledWindows.change.trigger();
+
+    // trigger the onload event
+    for (const window of state.tiledWindows.val) {
+        if (window.key === windowKey) {
+            window.onLoad.trigger();
+        }
+    }
 }
 
 /*
@@ -429,6 +552,10 @@ export type ResourceFieldInfo = {
 
 export type ResourceInfo = {
     fields: ResourceFieldInfo[];
+    tableFields: string[];
+    makeTableRowContent: (record: Record) => (JQuery | string)[];
+    title: string;
+    pluralTitle: string;
 };
 
 export function processResourceInfo(
@@ -454,13 +581,22 @@ export function processResourceInfo(
             type: NumberField('datetime-local')
         }
     ]);
-    return { fields };
+    return {
+        fields,
+        tableFields: conf.tableFields,
+        makeTableRowContent: conf.makeTableRowContent,
+        title: conf.title,
+        pluralTitle: conf.pluralTitle
+    };
 }
 
 export type UnprocessedResourceInfo = {
     fields: [string, FormFieldType][]; // name, string/number, type
     fieldNameMap: { [name: string]: string };
     tableFields: string[];
+    makeTableRowContent: (record: Record) => (JQuery | string)[];
+    title: string;
+    pluralTitle: string;
 };
 
 export function makeBasicStudentConfig(): [string, FormFieldType][] {
@@ -483,17 +619,29 @@ const fieldNameMap = {
     tutor: 'Tutor',
     status: 'Status'
 };
-export const tutorsInfo: UnprocessedResourceInfo = {
+const tutorsInfo: UnprocessedResourceInfo = {
     fields: [...makeBasicStudentConfig()],
     fieldNameMap,
-    tableFields: ['friendlyFullName', 'grade']
+    tableFields: ['friendlyFullName', 'grade'],
+    makeTableRowContent: record => [
+        tutors.createMarker(record.id, x => x.friendlyFullName),
+        record.grade
+    ],
+    title: 'tutor',
+    pluralTitle: 'tutors'
 };
-export const learnersInfo: UnprocessedResourceInfo = {
+const learnersInfo: UnprocessedResourceInfo = {
     fields: [...makeBasicStudentConfig()],
     fieldNameMap,
-    tableFields: ['friendlyFullName', 'grade']
+    tableFields: ['friendlyFullName', 'grade'],
+    makeTableRowContent: record => [
+        learners.createMarker(record.id, x => x.friendlyFullName),
+        record.grade
+    ],
+    title: 'learner',
+    pluralTitle: 'learners'
 };
-export const requestsInfo: UnprocessedResourceInfo = {
+const requestsInfo: UnprocessedResourceInfo = {
     fields: [
         ['learner', NumberField('id')],
         [
@@ -502,10 +650,16 @@ export const requestsInfo: UnprocessedResourceInfo = {
         ]
     ],
     fieldNameMap,
-    tableFields: ['learner', 'status']
+    tableFields: ['learner', 'status'],
+    makeTableRowContent: record => [
+        learners.createMarker(record.learner, x => x.friendlyFullName),
+        record.status
+    ],
+    title: 'request',
+    pluralTitle: 'requests'
 };
 
-export const bookingsInfo: UnprocessedResourceInfo = {
+const bookingsInfo: UnprocessedResourceInfo = {
     fields: [
         ['learner', StringField('text')],
         ['tutor', StringField('text')],
@@ -534,10 +688,17 @@ export const bookingsInfo: UnprocessedResourceInfo = {
         ]
     ],
     fieldNameMap,
-    tableFields: ['learner', 'tutor', 'status']
+    tableFields: ['learner', 'tutor', 'status'],
+    makeTableRowContent: record => [
+        learners.createMarker(record.learner, x => x.friendlyFullName),
+        tutors.createMarker(record.tutor, x => x.friendlyFullName),
+        record.status
+    ],
+    title: 'booking',
+    pluralTitle: 'bookings'
 };
 
-export const matchingsInfo: UnprocessedResourceInfo = {
+const matchingsInfo: UnprocessedResourceInfo = {
     fields: [
         ['learner', StringField('text')],
         ['tutor', StringField('text')],
@@ -550,18 +711,30 @@ export const matchingsInfo: UnprocessedResourceInfo = {
         ]
     ],
     fieldNameMap,
-    tableFields: ['learner', 'tutor', 'status']
+    tableFields: ['learner', 'tutor', 'status'],
+    makeTableRowContent: record => [
+        learners.createMarker(record.learner, x => x.friendlyFullName),
+        tutors.createMarker(record.tutor, x => x.friendlyFullName),
+        record.status
+    ],
+    title: 'matching',
+    pluralTitle: 'matchings'
 };
 
-export const requestSubmissionsInfo: UnprocessedResourceInfo = {
+const requestSubmissionsInfo: UnprocessedResourceInfo = {
     fields: [...makeBasicStudentConfig()],
     fieldNameMap,
-    tableFields: ['friendlyFullName']
+    tableFields: ['friendlyFullName'],
+    makeTableRowContent: record => [
+        requestSubmissions.createMarker(record.id, x => x.friendlyFullName)
+    ],
+    title: 'request submission',
+    pluralTitle: 'request submissions'
 };
 
 export const tutors = new Resource('tutors', processResourceInfo(tutorsInfo));
 export const learners = new Resource(
-    'tutors',
+    'learners',
     processResourceInfo(learnersInfo)
 );
 export const requests = new Resource(
@@ -580,3 +753,12 @@ export const requestSubmissions = new Resource(
     'requestSubmissions',
     processResourceInfo(requestSubmissionsInfo)
 );
+
+window['appDebug'] = () => ({
+    tutors,
+    learners,
+    bookings,
+    matchings,
+    requests,
+    requestSubmissions
+});

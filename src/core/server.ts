@@ -8,7 +8,9 @@ import {
     matchings,
     requests,
     requestSubmissions,
-    stringifyError
+    stringifyError,
+    ResourceInfo,
+    Record
 } from './shared';
 
 function failAfterFiveSeconds<T>(p: Promise<T>): Promise<T> {
@@ -25,11 +27,66 @@ function failAfterFiveSeconds<T>(p: Promise<T>): Promise<T> {
     });
 }
 
-export async function askServer(args: any[]): Promise<ServerResponse<any>> {
+export function convertServerResponseToAskFinished<T>(
+    response: ServerResponse<T>
+): AskFinished<T> {
+    if (response.error) {
+        const v: AskError = {
+            status: AskStatus.ERROR,
+            message: response.message
+        };
+        return v;
+    } else {
+        const v: AskLoaded<T> = {
+            status: AskStatus.LOADED,
+            val: response.val
+        };
+        return v;
+    }
+}
+export function getResultOrFail<T>(askFinished: AskFinished<T>): T {
+    if (askFinished.status == AskStatus.ERROR) {
+        throw askFinished.message;
+    } else {
+        return askFinished.val;
+    }
+}
+export async function askServer(args: any[]): Promise<AskFinished<any>> {
     console.log('[server] args', args);
     const result = await failAfterFiveSeconds(mockServer(args));
     console.log('[server] result', result);
-    return result;
+    return convertServerResponseToAskFinished(result);
+}
+
+/*
+KEY CONCEPT: how data is kept in sync
+Suppose multiple people are using the app at once. When someone sends a change to the server, onClientNotification methods for ALL OTHER clients are called, which basically tell the other clients to "make XYZ change to your local copy of the data".
+*/
+export async function onClientNotification(args: any[]): Promise<void> {
+    console.log('[server notification]', args);
+    const getResource: { [name: string]: () => Resource } = {
+        tutors: () => tutors,
+        learners: () => learners,
+        bookings: () => bookings,
+        matchings: () => matchings,
+        requests: () => requests,
+        requestSubmissions: () => requestSubmissions
+    };
+    if (args[0] === 'update') {
+        getResource[args[1]]().state.onServerNotificationUpdate(
+            args[2] as Record
+        );
+    }
+    if (args[0] === 'delete') {
+        getResource[args[1]]().state.onServerNotificationDelete(
+            args[2] as number
+        );
+    }
+    if (args[0] === 'create') {
+        getResource[args[1]]().state.onServerNotificationCreate(
+            args[2] as Record
+        );
+    }
 }
 
 export type ServerResponse<T> = {
@@ -62,6 +119,7 @@ export type AskLoaded<T> = {
 class MockResourceServerEndpoint {
     resource: () => Resource;
     contents: RecordCollection;
+    nextKey: number = 1000; // default ID is very high for testing purposes
 
     constructor(resource: () => Resource, contents: RecordCollection) {
         // IMPORTANT: the resource field is ":() => Resource" intentionally.
@@ -82,6 +140,14 @@ class MockResourceServerEndpoint {
         };
     }
 
+    error(message: string): ServerResponse<any> {
+        return {
+            error: true,
+            message,
+            val: null
+        };
+    }
+
     processClientAsk(args: any[]): ServerResponse<any> {
         console.log('[mock server] endpoint', this.resource().name, args);
         if (args[0] === 'retrieveAll') {
@@ -89,13 +155,44 @@ class MockResourceServerEndpoint {
         }
         if (args[0] === 'update') {
             this.contents[String(args[1].id)] = args[1];
+            onClientNotification(['update', this.resource().name, args[1]]);
             return this.success(null);
         }
+        if (args[0] === 'retrieveDefault') {
+            const result = {
+                id: this.nextKey,
+                date: Date.now()
+            };
+            ++this.nextKey;
+            for (const { name } of this.resource().info.fields) {
+                if (result[name] === undefined) {
+                    result[name] = '';
+                }
+            }
+            return this.success(result);
+        }
+        if (args[0] === 'create') {
+            this.contents[String(args[1].id)] = args[1];
+            onClientNotification(['create', this.resource().name, args[1]]);
+            return this.success(null);
+        }
+        if (args[0] === 'delete') {
+            delete this.contents[String(args[1])];
+            onClientNotification(['delete', this.resource().name, args[1]]);
+            return this.success(null);
+        }
+        throw new Error('args not matched');
     }
 
     async replyToClientAsk(args: any[]): Promise<ServerResponse<any>> {
         return new Promise((res, rej) => {
-            setTimeout(() => res(this.processClientAsk(args)), 500);
+            setTimeout(() => {
+                try {
+                    res(this.processClientAsk(args));
+                } catch (v) {
+                    rej(v);
+                }
+            }, 500); // fake a half-second delay
         });
     }
 }
@@ -112,7 +209,7 @@ export const mockResourceServerEndpoints = {
             grade: 12
         },
         '2': {
-            id: 1,
+            id: 2,
             date: 1561335668346,
             firstName: 'Mary',
             lastName: 'Watson',
@@ -132,7 +229,7 @@ export const mockResourceServerEndpoints = {
 };
 
 async function mockServer(args: any[]): Promise<ServerResponse<any>> {
-    // only for resources ;)
+    // only for resources so far
     try {
         return await mockResourceServerEndpoints[args[0]].replyToClientAsk(
             args.slice(1)

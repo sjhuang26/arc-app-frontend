@@ -4,7 +4,7 @@ TODO: badge, dropdown, and search
 import { container, Widget, DomWidget, ObservableState } from '../core/shared';
 import { AskStatus } from '../core/server';
 
-export function LoaderWidget() {
+/*export function LoaderWidget() {
     const spinner = container('<div></div>')(
         $('<strong>Loading...</strong>'),
         $('<div class="spinner-border"></div>')
@@ -27,21 +27,67 @@ export function LoaderWidget() {
         onLoaded,
         onError
     };
+}*/
+
+export function ErrorWidget(message: string): Widget {
+    const dom = container('<div class="alert alert-danger"></div>')(
+        container('<h1></h1>')('Error'),
+        $(
+            '<p><strong>An error occurred. You can try closing the window and opening again.</strong></p>'
+        ),
+        container('<span></span>')(message)
+    );
+    return DomWidget(dom);
 }
 
 export function ButtonWidget(
-    text: string,
+    content: string | JQuery,
     onClick: () => void,
     variant: string = 'primary'
 ): Widget {
     // to create an outline button, add "outline" to the variant
     if (variant === 'outline') variant = 'outline-primary';
-    return DomWidget(
-        $('<button></button>')
-            .text(text)
-            .addClass('btn btn-' + variant)
-            .click(onClick)
-    );
+    if (typeof content === 'string') {
+        return DomWidget(
+            $('<button></button>')
+                .text(content)
+                .addClass('btn btn-' + variant)
+                .click(onClick)
+        );
+    } else {
+        return DomWidget(
+            $('<button></button>')
+                .append(content)
+                .addClass('btn btn-' + variant)
+                .click(onClick)
+        );
+    }
+}
+
+const modalHtmlString = `<div class="modal" tabindex="-1" role="dialog">
+<div class="modal-dialog" role="document">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h5 class="modal-title"></h5>
+      <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+        <span aria-hidden="true">&times;</span>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="js-text">Modal body text goes here.</p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-dismiss="modal">OK</button>
+    </div>
+  </div>
+</div>
+</div>`;
+
+export function showSimpleModal(title: string, text: string): void {
+    const dom = $(modalHtmlString);
+    dom.modal();
+    dom.find('.modal-title').text(title);
+    dom.find('.js-text').text(text);
 }
 
 export type FormValueWidget<T> = Widget & {
