@@ -4,10 +4,14 @@ export function TableWidget(
     headerTitles: string[],
     makeRowContent: (record: Record) => (JQuery | string)[]
 ) {
-    let values: RecordCollection = {};
+    let values: Record[] = [];
     const dom = $('<table class="table"></table>');
-    function setAllValues(recordCollection: RecordCollection) {
-        values = recordCollection;
+    function setAllValues(recordCollection: RecordCollection | Record[]) {
+        if (typeof recordCollection === 'object') {
+            values = Object.values(recordCollection);
+        } else {
+            values = recordCollection;
+        }
         rebuildTable();
     }
     function rebuildTable() {
@@ -25,7 +29,7 @@ export function TableWidget(
         // content
         dom.append(
             container('<tbody></tbody>')(
-                Object.values(values).map(record =>
+                values.map(record =>
                     container('<tr></tr>')(
                         makeRowContent(record).map((rowContent, i) =>
                             container(

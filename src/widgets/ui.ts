@@ -74,25 +74,49 @@ const modalHtmlString = `<div class="modal" tabindex="-1" role="dialog">
       </button>
     </div>
     <div class="modal-body">
-      <p class="js-text">Modal body text goes here.</p>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-secondary" data-dismiss="modal">OK</button>
     </div>
   </div>
 </div>
 </div>`;
 
-export function showSimpleModal(title: string, text: string): void {
+export async function showModal(
+    title: string,
+    content: string | JQuery,
+    buildButtons: (
+        buildButton: (
+            text: string,
+            style: string,
+            onClick?: () => void
+        ) => JQuery
+    ) => JQuery[]
+): Promise<void> {
     const dom = $(modalHtmlString);
-    dom.modal();
     dom.find('.modal-title').text(title);
-    dom.find('.js-text').text(text);
+    dom.find('.modal-body').append(
+        typeof content === 'string' ? container('<p></p>')(content) : content
+    );
+    dom.find('.modal-footer').append(
+        buildButtons.call(
+            null,
+            (text: string, style: string, onClick?: () => void) =>
+                $('<button type="button" class="btn" data-dismiss="modal">')
+                    .addClass('btn-' + style)
+                    .click(onClick)
+                    .text(text)
+        )
+    );
+    dom.modal();
+    return new Promise(res => {
+        dom.on('hidden.bs.modal', () => res());
+    });
 }
 
 export type FormValueWidget<T> = Widget & {
     getValue(): any;
     setValue(newVal: T): JQuery;
+    onChange(doThis: (newVal: T) => void): void;
 };
 
 export function FormStringInputWidget(type: string): FormValueWidget<string> {
@@ -104,6 +128,9 @@ export function FormStringInputWidget(type: string): FormValueWidget<string> {
         },
         setValue(newVal: string): JQuery {
             return dom.val(newVal);
+        },
+        onChange(doThis: (newVal: string) => void): void {
+            dom.val(() => doThis.call(null, dom.val() as string));
         }
     };
 }
@@ -120,16 +147,19 @@ export function FormNumberInputWidget(type: string): FormValueWidget<number> {
         // TODO: create a resource selection dropdown, or at least a name search
         dom = $(`<input class="form-control" type="number">`);
     }
+    function getVal(): number {
+        if (type == 'datetime-local') {
+            // a hack to get around Typescript types
+            const htmlEl: any = dom.get(0);
+            const date = htmlEl.valueAsNumber as number;
+            return date ? date : 0;
+        }
+        return Number(dom.val());
+    }
     return {
         dom,
         getValue(): number {
-            if (type == 'datetime-local') {
-                // a hack to get around Typescript types
-                const htmlEl: any = dom.get(0);
-                const date = htmlEl.valueAsNumber as number;
-                return date ? date : 0;
-            }
-            return Number(dom.val());
+            return getVal();
         },
         setValue(val: number): JQuery {
             if (type == 'datetime-local') {
@@ -139,6 +169,9 @@ export function FormNumberInputWidget(type: string): FormValueWidget<number> {
                 return dom;
             }
             return dom.val(val);
+        },
+        onChange(doThis) {
+            dom.val(doThis.call(null, getVal()));
         }
     };
 }
@@ -166,19 +199,23 @@ export function FormSelectWidget(
     optionTitles: string[]
 ): FormValueWidget<string> {
     const dom = container('<select class="form-control"></select>')(
-        options.map((o, i) =>
-            container('<option></option>')(o).val(optionTitles[i])
+        options.map((_o, i) =>
+            container('<option></option>')(optionTitles[i]).val(options[i])
         )
     );
-    return {
+    const k = {
         dom,
         getValue(): string {
             return dom.val() as string;
         },
         setValue(val: string): JQuery {
             return dom.val(val);
+        },
+        onChange(doThis: (newVal: string) => void): void {
+            dom.change(() => doThis.call(null, dom.val() as string));
         }
     };
+    return k;
 }
 export function SearchItemWidget(onSubmit: () => void): Widget {
     return DomWidget(

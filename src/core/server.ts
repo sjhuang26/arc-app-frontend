@@ -160,10 +160,9 @@ class MockResourceServerEndpoint {
         }
         if (args[0] === 'retrieveDefault') {
             const result = {
-                id: this.nextKey,
+                id: -1,
                 date: Date.now()
             };
-            ++this.nextKey;
             for (const { name } of this.resource().info.fields) {
                 if (result[name] === undefined) {
                     result[name] = '';
@@ -172,9 +171,16 @@ class MockResourceServerEndpoint {
             return this.success(result);
         }
         if (args[0] === 'create') {
+            if (args[1].date === -1) {
+                args[1].date = Date.now();
+            }
+            if (args[1].id === -1) {
+                args[1].id = this.nextKey;
+                ++this.nextKey;
+            }
             this.contents[String(args[1].id)] = args[1];
             onClientNotification(['create', this.resource().name, args[1]]);
-            return this.success(null);
+            return this.success(this.contents[String(args[1].id)]);
         }
         if (args[0] === 'delete') {
             delete this.contents[String(args[1])];
@@ -218,8 +224,26 @@ export const mockResourceServerEndpoints = {
             grade: 9
         }
     }),
-    learners: new MockResourceServerEndpoint(() => learners, {}),
-    bookings: new MockResourceServerEndpoint(() => bookings, {}),
+    learners: new MockResourceServerEndpoint(() => learners, {
+        '1': {
+            id: 1,
+            date: 1561334668346,
+            firstName: 'Alex',
+            lastName: 'Doe',
+            friendlyName: 'Al',
+            friendlyFullName: 'Al-D',
+            grade: 12
+        }
+    }),
+    bookings: new MockResourceServerEndpoint(() => bookings, {
+        '1': {
+            tutor: 1,
+            learner: 1,
+            id: 1,
+            date: 1561334683467,
+            status: 'unsent'
+        }
+    }),
     matchings: new MockResourceServerEndpoint(() => matchings, {}),
     requests: new MockResourceServerEndpoint(() => requests, {}),
     requestSubmissions: new MockResourceServerEndpoint(
@@ -231,8 +255,10 @@ export const mockResourceServerEndpoints = {
 async function mockServer(args: any[]): Promise<ServerResponse<any>> {
     // only for resources so far
     try {
-        return await mockResourceServerEndpoints[args[0]].replyToClientAsk(
-            args.slice(1)
+        const mockArgs = JSON.parse(JSON.stringify(args));
+
+        return await mockResourceServerEndpoints[mockArgs[0]].replyToClientAsk(
+            mockArgs.slice(1)
         );
     } catch (err) {
         return {

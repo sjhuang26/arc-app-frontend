@@ -1,12 +1,8 @@
 import {
     askServer,
-    ServerResponse,
     Ask,
     AskStatus,
     AskFinished,
-    AskError,
-    AskLoaded,
-    convertServerResponseToAskFinished,
     getResultOrFail
 } from './server';
 import { FormWidget } from '../widgets/Form';
@@ -17,7 +13,8 @@ import {
     NumberField,
     SelectField,
     FormFieldType,
-    ErrorWidget
+    ErrorWidget,
+    ButtonWidget
 } from '../widgets/ui';
 import { ActionBarWidget } from '../widgets/ActionBar';
 import { TableWidget } from '../widgets/Table';
@@ -141,7 +138,7 @@ export class ResourceEndpoint {
     retrieve(id: number): Promise<AskFinished<Record>> {
         return this.askEndpoint('retrieve', id);
     }
-    create(record: Record): Promise<AskFinished<void>> {
+    create(record: Record): Promise<AskFinished<Record>> {
         return this.askEndpoint('create', record);
     }
     delete(id: number): Promise<AskFinished<void>> {
@@ -154,19 +151,39 @@ export class ResourceEndpoint {
         return this.askEndpoint('update', record);
     }
 }
-export class ResourceObservable extends ObservableState<Ask<RecordCollection>> {
+export class ResourceObservable extends ObservableState<
+    AskFinished<RecordCollection>
+> {
     endpoint: ResourceEndpoint;
 
     constructor(endpoint: ResourceEndpoint) {
         super({
-            status: AskStatus.LOADING
+            status: AskStatus.ERROR,
+            message: 'resource was not initialized properly'
         });
         this.endpoint = endpoint;
     }
+    async initialize() {
+        // If this fails, there will be some cascading failure throughout the app, but only when the resource is actually used. This prevents catastrophic failure the moment a resource fails.
+        const newVal: AskFinished<
+            RecordCollection
+        > = await this.endpoint.retrieveAll();
+        this.changeTo(newVal);
+        return newVal;
+    }
+
     getRecordOrFail(id: number) {
         const val = this.getLoadedOrFail();
         if (val[String(id)] === undefined) {
             throw new Error('record not available');
+        }
+        return val[String(id)];
+    }
+
+    findRecordOrFail(id: number) {
+        const val = this.getLoadedOrFail();
+        if (val[String(id)] === undefined) {
+            return null;
         }
         return val[String(id)];
     }
@@ -178,21 +195,6 @@ export class ResourceObservable extends ObservableState<Ask<RecordCollection>> {
         return this.val.val;
     }
 
-    async loadRecordCollection(): Promise<AskFinished<RecordCollection>> {
-        // TODO: the assumption is made here that once the resource is retrieved, it never changes. The real program will (1) declare resource dependencies for each window (2) use an onEdit() event hook server-side to notify the client of any stale data, refreshing windows/widgets as necessary (3) assume that edit locking won't happen, because editing is usually a one-click operation
-        if (
-            this.val.status == AskStatus.ERROR ||
-            this.val.status == AskStatus.LOADED
-        ) {
-            return this.val;
-        }
-        const newVal: AskFinished<
-            RecordCollection
-        > = await this.endpoint.retrieveAll();
-        this.changeTo(newVal);
-        return newVal;
-    }
-
     async forceRefresh(): Promise<void> {
         const newVal: AskFinished<
             RecordCollection
@@ -200,27 +202,57 @@ export class ResourceObservable extends ObservableState<Ask<RecordCollection>> {
         this.changeTo(newVal);
     }
 
-    async dependOnRecordCollectionOrFail(): Promise<RecordCollection> {
-        const v = await this.loadRecordCollection();
-        if (v.status == AskStatus.ERROR) {
-            throw v.message;
+    getRecordCollectionOrFail(): RecordCollection {
+        if (this.val.status == AskStatus.ERROR) {
+            throw this.val.message;
         } else {
-            return v.val;
+            return this.val.val;
         }
     }
     async dependOnRecordOrFail(id: number): Promise<Record> {
-        await this.dependOnRecordCollectionOrFail();
+        await this.getRecordCollectionOrFail();
         return this.getRecordOrFail(id);
     }
 
     async updateRecord(record: Record): Promise<AskFinished<void>> {
+        if (this.val.status !== AskStatus.LOADED) {
+            return this.val;
+        }
+
         const ask = await this.endpoint.update(record);
         if (ask.status == AskStatus.LOADED) {
             // update the client to match the server (sync)
-            this.val[String(record.id)] = record;
+            this.val.val[String(record.id)] = record;
             this.change.trigger();
         }
 
+        return ask;
+    }
+
+    async createRecord(record: Record): Promise<AskFinished<Record>> {
+        const ask = await this.endpoint.create(record);
+        if (this.val.status !== AskStatus.LOADED) {
+            return this.val;
+        }
+
+        if (ask.status == AskStatus.LOADED) {
+            // update the client to match the server (sync)
+            this.val.val[String(ask.val.id)] = ask.val;
+            this.change.trigger();
+        }
+        return ask;
+    }
+
+    async deleteRecord(id: number): Promise<AskFinished<void>> {
+        const ask = await this.endpoint.delete(id);
+        if (
+            ask.status == AskStatus.LOADED &&
+            this.val.status == AskStatus.LOADED
+        ) {
+            // update the client to match the server (sync)
+            delete this.val.val[String(id)];
+            this.change.trigger();
+        }
         return ask;
     }
 
@@ -263,7 +295,7 @@ export class Resource {
         return FormWidget(this.info.fields);
     }
 
-    createMarker(id: number, builder: (record: Record) => JQuery): JQuery {
+    createMarker(id: number, builder: (record: Record) => string): JQuery {
         const dom = container('<a style="cursor: pointer"></a>')(
             `??? ${this.info.title} (LOADING)`
         );
@@ -271,7 +303,7 @@ export class Resource {
             .dependOnRecordOrFail(id)
             .then(record => {
                 dom.empty();
-                dom.append(builder(record)).click(() =>
+                dom.text(builder(record)).click(() =>
                     this.makeTiledEditWindow(id)
                 );
             })
@@ -284,7 +316,7 @@ export class Resource {
 
     createLabel(id: number, builder: (record: Record) => string): string {
         const record = this.state.getRecordOrFail(id);
-        return builder(record);
+        return builder.call(null, record);
     }
 
     // The edit window is kind of combined with the view window.
@@ -297,12 +329,12 @@ export class Resource {
                 return w.charAt(0).toUpperCase() + w.slice(1);
             }
 
-            await this.state.dependOnRecordCollectionOrFail();
+            await this.state.getRecordCollectionOrFail();
             record = this.state.getRecordOrFail(id);
-            windowLabel = windowLabel =
+            windowLabel =
                 capitalizeWord(this.info.title) +
                 ': ' +
-                this.createLabel(id, record => record.friendlyFullName);
+                this.createLabel(id, this.info.makeLabel);
 
             const form = this.makeFormWidget();
             form.setAllValues(record);
@@ -330,16 +362,14 @@ export class Resource {
     }
 
     async makeTiledCreateWindow(): Promise<void> {
-        let record: Record = null;
         let errorMessage: string = '';
         let windowLabel: string = 'ERROR in: create new ' + this.info.title;
         try {
-            await this.state.dependOnRecordCollectionOrFail();
-            record = getResultOrFail(await this.endpoint.retrieveDefault());
+            await this.state.getRecordCollectionOrFail();
             windowLabel = 'Create new ' + this.info.title;
 
             const form = this.makeFormWidget();
-            form.setAllValues(record);
+            form.setAllValues({ id: -1, date: Date.now() });
 
             const { closeWindow } = useTiledWindow(
                 container('<div></div>')(
@@ -350,7 +380,12 @@ export class Resource {
                     [
                         'Create',
                         async () => {
-                            await this.endpoint.create(form.getAllValues());
+                            const ask = await this.state.createRecord(
+                                form.getAllValues()
+                            );
+                            if (ask.status === AskStatus.ERROR) {
+                                alert('ERROR!\n' + stringifyError(ask.message));
+                            }
                             closeWindow();
                         }
                     ],
@@ -375,11 +410,18 @@ export class Resource {
         try {
             const onLoad = new Event();
 
-            recordCollection = await this.state.dependOnRecordCollectionOrFail();
+            recordCollection = await this.state.getRecordCollectionOrFail();
 
             const table = TableWidget(
-                this.info.tableFields,
-                this.info.makeTableRowContent
+                this.info.tableFields.concat('View'),
+                record =>
+                    this.info
+                        .makeTableRowContent(record)
+                        .concat(
+                            ButtonWidget('View', () =>
+                                this.makeTiledEditWindow(record.id)
+                            ).dom
+                        )
             );
 
             onLoad.listen(() => {
@@ -531,11 +573,12 @@ export function showWindow(windowKey: number) {
     state.tiledWindows.change.trigger();
 
     // trigger the onload event
-    for (const window of state.tiledWindows.val) {
+    // TODO: removed the event for now, and might add back in later
+    /*for (const window of state.tiledWindows.val) {
         if (window.key === windowKey) {
             window.onLoad.trigger();
         }
-    }
+    }*/
 }
 
 /*
@@ -553,9 +596,11 @@ export type ResourceFieldInfo = {
 export type ResourceInfo = {
     fields: ResourceFieldInfo[];
     tableFields: string[];
+    tableFieldTitles: string[];
     makeTableRowContent: (record: Record) => (JQuery | string)[];
     title: string;
     pluralTitle: string;
+    makeLabel: (record: Record) => string;
 };
 
 export function processResourceInfo(
@@ -568,6 +613,10 @@ export function processResourceInfo(
             name,
             type
         });
+    }
+    let tableFieldTitles: string[] = [];
+    for (const name of conf.tableFields) {
+        tableFieldTitles.push(conf.fieldNameMap[name]);
     }
     fields = fields.concat([
         {
@@ -586,7 +635,9 @@ export function processResourceInfo(
         tableFields: conf.tableFields,
         makeTableRowContent: conf.makeTableRowContent,
         title: conf.title,
-        pluralTitle: conf.pluralTitle
+        pluralTitle: conf.pluralTitle,
+        tableFieldTitles,
+        makeLabel: conf.makeLabel
     };
 }
 
@@ -597,6 +648,7 @@ export type UnprocessedResourceInfo = {
     makeTableRowContent: (record: Record) => (JQuery | string)[];
     title: string;
     pluralTitle: string;
+    makeLabel: (record: Record) => string;
 };
 
 export function makeBasicStudentConfig(): [string, FormFieldType][] {
@@ -628,7 +680,8 @@ const tutorsInfo: UnprocessedResourceInfo = {
         record.grade
     ],
     title: 'tutor',
-    pluralTitle: 'tutors'
+    pluralTitle: 'tutors',
+    makeLabel: record => record.friendlyFullName
 };
 const learnersInfo: UnprocessedResourceInfo = {
     fields: [...makeBasicStudentConfig()],
@@ -639,30 +692,26 @@ const learnersInfo: UnprocessedResourceInfo = {
         record.grade
     ],
     title: 'learner',
-    pluralTitle: 'learners'
+    pluralTitle: 'learners',
+    makeLabel: record => record.friendlyFullName
 };
 const requestsInfo: UnprocessedResourceInfo = {
-    fields: [
-        ['learner', NumberField('id')],
-        [
-            'status',
-            SelectField(['unchecked', 'checked'], ['Unchecked', 'Checked'])
-        ]
-    ],
+    fields: [['learner', NumberField('id')]],
     fieldNameMap,
-    tableFields: ['learner', 'status'],
+    tableFields: ['learner'],
     makeTableRowContent: record => [
-        learners.createMarker(record.learner, x => x.friendlyFullName),
-        record.status
+        learners.createMarker(record.learner, x => x.friendlyFullName)
     ],
     title: 'request',
-    pluralTitle: 'requests'
+    pluralTitle: 'requests',
+    makeLabel: record =>
+        learners.createLabel(record.id, x => x.friendlyFullName)
 };
 
 const bookingsInfo: UnprocessedResourceInfo = {
     fields: [
-        ['learner', StringField('text')],
-        ['tutor', StringField('text')],
+        ['learner', NumberField('id')],
+        ['tutor', NumberField('id')],
         [
             'status',
             SelectField(
@@ -695,7 +744,11 @@ const bookingsInfo: UnprocessedResourceInfo = {
         record.status
     ],
     title: 'booking',
-    pluralTitle: 'bookings'
+    pluralTitle: 'bookings',
+    makeLabel: record =>
+        tutors.state.getRecordOrFail(record.tutor).friendlyFullName +
+        ' <> ' +
+        learners.state.getRecordOrFail(record.tutor).friendlyFullName
 };
 
 const matchingsInfo: UnprocessedResourceInfo = {
@@ -718,7 +771,11 @@ const matchingsInfo: UnprocessedResourceInfo = {
         record.status
     ],
     title: 'matching',
-    pluralTitle: 'matchings'
+    pluralTitle: 'matchings',
+    makeLabel: record =>
+        tutors.state.getRecordOrFail(record.tutor).friendlyFullName +
+        ' <> ' +
+        learners.state.getRecordOrFail(record.tutor).friendlyFullName
 };
 
 const requestSubmissionsInfo: UnprocessedResourceInfo = {
@@ -729,7 +786,8 @@ const requestSubmissionsInfo: UnprocessedResourceInfo = {
         requestSubmissions.createMarker(record.id, x => x.friendlyFullName)
     ],
     title: 'request submission',
-    pluralTitle: 'request submissions'
+    pluralTitle: 'request submissions',
+    makeLabel: record => record.friendlyFullName
 };
 
 export const tutors = new Resource('tutors', processResourceInfo(tutorsInfo));
@@ -753,6 +811,15 @@ export const requestSubmissions = new Resource(
     'requestSubmissions',
     processResourceInfo(requestSubmissionsInfo)
 );
+
+export async function initializeResources(): Promise<void> {
+    await tutors.state.initialize();
+    await learners.state.initialize();
+    await bookings.state.initialize();
+    await matchings.state.initialize();
+    await requests.state.initialize();
+    await requestSubmissions.state.initialize();
+}
 
 window['appDebug'] = () => ({
     tutors,
