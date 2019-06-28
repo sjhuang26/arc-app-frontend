@@ -212,7 +212,10 @@ export const mockResourceServerEndpoints = {
             lastName: 'Doe',
             friendlyName: 'Jo',
             friendlyFullName: 'Jo-Do',
-            grade: 12
+            grade: 12,
+            mods: [1, 2],
+            modsPref: [1],
+            subjectList: 'Geometry, Spanish'
         },
         '2': {
             id: 2,
@@ -221,7 +224,10 @@ export const mockResourceServerEndpoints = {
             lastName: 'Watson',
             friendlyName: 'Ma',
             friendlyFullName: 'Ma-W',
-            grade: 9
+            grade: 9,
+            mods: [3, 4],
+            modsPref: [4],
+            subjectList: 'English, French'
         }
     }),
     learners: new MockResourceServerEndpoint(() => learners, {
@@ -235,20 +241,24 @@ export const mockResourceServerEndpoints = {
             grade: 12
         }
     }),
-    bookings: new MockResourceServerEndpoint(() => bookings, {
-        '1': {
-            tutor: 1,
-            learner: 1,
-            id: 1,
-            date: 1561334683467,
-            status: 'unsent'
-        }
-    }),
+    bookings: new MockResourceServerEndpoint(() => bookings, {}),
     matchings: new MockResourceServerEndpoint(() => matchings, {}),
     requests: new MockResourceServerEndpoint(() => requests, {}),
     requestSubmissions: new MockResourceServerEndpoint(
         () => requestSubmissions,
-        {}
+        {
+            '1': {
+                firstName: 'a',
+                lastName: 'b',
+                friendlyName: 'c',
+                friendlyFullName: 'd',
+                grade: 1,
+                mods: [1, 3, 4],
+                subject: 'asdf',
+                id: 1,
+                date: 1561730705297
+            }
+        }
     )
 };
 

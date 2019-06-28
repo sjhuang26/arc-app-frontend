@@ -1,16 +1,16 @@
 import { RecordCollection, Record, container } from '../core/shared';
 
-export function TableWidget(
+export function TableWidget<T>(
     headerTitles: string[],
-    makeRowContent: (record: Record) => (JQuery | string)[]
+    makeRowContent: (item: T) => (JQuery | string)[]
 ) {
-    let values: Record[] = [];
+    let values: T[] = [];
     const dom = $('<table class="table"></table>');
-    function setAllValues(recordCollection: RecordCollection | Record[]) {
-        if (typeof recordCollection === 'object') {
-            values = Object.values(recordCollection);
+    function setAllValues(collection: { [key: string]: T } | T[]) {
+        if (typeof collection === 'object') {
+            values = Object.values(collection);
         } else {
-            values = recordCollection;
+            values = collection;
         }
         rebuildTable();
     }
@@ -32,9 +32,7 @@ export function TableWidget(
                 values.map(record =>
                     container('<tr></tr>')(
                         makeRowContent(record).map((rowContent, i) =>
-                            container(
-                                i === 0 ? '<th scope="row"></th>' : '<td></td>'
-                            )(
+                            container('<td></td>')(
                                 typeof rowContent === 'string'
                                     ? document.createTextNode(rowContent)
                                     : rowContent

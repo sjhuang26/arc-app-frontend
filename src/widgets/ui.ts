@@ -176,6 +176,37 @@ export function FormNumberInputWidget(type: string): FormValueWidget<number> {
     };
 }
 
+export function FormNumberArrayInputWidget(
+    type: string
+): FormValueWidget<number[]> {
+    let dom: JQuery = null;
+    if (type === 'number') {
+        // arrays are entered as comma-separated values
+        dom = $(`<input class="form-control" type="text">`);
+    } else {
+        throw new Error('unsupported type');
+    }
+    function getVal(): number[] {
+        return String(dom.val())
+            .split(',')
+            .map(x => x.trim())
+            .filter(x => x !== '')
+            .map(x => Number(x));
+    }
+    return {
+        dom,
+        getValue(): number[] {
+            return getVal();
+        },
+        setValue(val: number[]): JQuery {
+            return dom.val(val.map(x => String(x)).join(', '));
+        },
+        onChange(doThis) {
+            dom.val(doThis.call(null, getVal()));
+        }
+    };
+}
+
 export function StringField(type: string) {
     return () => FormStringInputWidget(type);
 }
@@ -185,6 +216,10 @@ export function NumberField(type: string) {
 export function SelectField(options: string[], optionTitles: string[]) {
     return () => FormSelectWidget(options, optionTitles);
 }
+export function NumberArrayField(type: string) {
+    return () => FormNumberArrayInputWidget(type);
+}
+
 export type FormFieldType = () => FormValueWidget<any>;
 
 export function FormSubmitWidget(text: string): Widget {
@@ -217,6 +252,55 @@ export function FormSelectWidget(
     };
     return k;
 }
+export function FormToggleWidget(
+    titleWhenFalse: string,
+    titleWhenTrue: string,
+    styleWhenFalse: string = 'outline-secondary',
+    styleWhenTrue: string = 'primary'
+): FormValueWidget<boolean> {
+    function setVal(newVal: boolean): JQuery {
+        if (val === newVal) return;
+        if (newVal) {
+            val = true;
+            dom.text(titleWhenTrue);
+            dom.removeClass('btn-' + styleWhenFalse);
+            dom.addClass('btn-' + styleWhenTrue);
+            return dom;
+        } else {
+            val = false;
+            dom.text(titleWhenFalse);
+            dom.removeClass('btn-' + styleWhenTrue);
+            dom.addClass('btn-' + styleWhenFalse);
+            return dom;
+        }
+    }
+    const dom = $('<button class="btn"></button>').click(() => {
+        if (val === null) {
+            throw new Error('improper init of toggle button');
+        }
+        setVal(!val);
+    });
+    let val = null;
+
+    const k = {
+        dom,
+        getValue(): boolean {
+            if (val === null)
+                throw new Error(
+                    'attempt to read toggle button value before init'
+                );
+            return val;
+        },
+        setValue(val: boolean): JQuery {
+            setVal(val);
+            return dom;
+        },
+        onChange(doThis: (newVal: boolean) => void): void {
+            dom.click(() => doThis.call(null, val));
+        }
+    };
+    return k;
+}
 export function SearchItemWidget(onSubmit: () => void): Widget {
     return DomWidget(
         $('<form class="form-inline"></form>')
@@ -226,5 +310,29 @@ export function SearchItemWidget(onSubmit: () => void): Widget {
                 ev.preventDefault();
                 onSubmit.call(null);
             })
+    );
+}
+
+export function createMarkerLink(text: string, onClick: () => void): JQuery {
+    return $('<a style="cursor: pointer"></a>')
+        .text(text)
+        .click(onClick);
+}
+
+export function MessageTemplateWidget(content: string): Widget {
+    const textarea = $('<textarea class="form-control"></textarea>');
+    textarea.val(content);
+
+    const button = ButtonWidget('Copy to clipboard', () => {
+        const htmlEl: any = textarea[0];
+        htmlEl.select();
+        document.execCommand('copy');
+        button.val('Copied!');
+        setTimeout(() => button.val('Copy to clipboard'), 1000);
+    });
+    return DomWidget(
+        container('<div class="card"></div>')(
+            container('<div class="card-body"></div>')(textarea, button)
+        )
     );
 }

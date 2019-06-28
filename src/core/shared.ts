@@ -14,7 +14,9 @@ import {
     SelectField,
     FormFieldType,
     ErrorWidget,
-    ButtonWidget
+    ButtonWidget,
+    NumberArrayField,
+    createMarkerLink
 } from '../widgets/ui';
 import { ActionBarWidget } from '../widgets/ActionBar';
 import { TableWidget } from '../widgets/Table';
@@ -98,6 +100,15 @@ export class ObservableState<T> {
     }
 }
 
+export function generateStringOfMods(
+    mods: number[],
+    modsPref: number[]
+): string {
+    return mods
+        .map(mod => String(mod) + (modsPref.includes(mod) ? '*' : ''))
+        .join(', ');
+}
+
 /*
 
 RECORDS
@@ -175,7 +186,9 @@ export class ResourceObservable extends ObservableState<
     getRecordOrFail(id: number) {
         const val = this.getLoadedOrFail();
         if (val[String(id)] === undefined) {
-            throw new Error('record not available');
+            throw new Error(
+                'record not available: ' + this.endpoint.name + '/#' + id
+            );
         }
         return val[String(id)];
     }
@@ -190,7 +203,7 @@ export class ResourceObservable extends ObservableState<
 
     getLoadedOrFail(): RecordCollection {
         if (this.val.status != AskStatus.LOADED) {
-            throw new Error('resource is not loaded');
+            throw new Error('resource is not loaded: ' + this.endpoint.name);
         }
         return this.val.val;
     }
@@ -295,23 +308,12 @@ export class Resource {
         return FormWidget(this.info.fields);
     }
 
-    createMarker(id: number, builder: (record: Record) => string): JQuery {
-        const dom = container('<a style="cursor: pointer"></a>')(
-            `??? ${this.info.title} (LOADING)`
-        );
-        this.state
-            .dependOnRecordOrFail(id)
-            .then(record => {
-                dom.empty();
-                dom.text(builder(record)).click(() =>
-                    this.makeTiledEditWindow(id)
-                );
-            })
-            .catch(err => {
-                console.error(err);
-                dom.text(`??? ${this.info.title} (ERROR)`);
-            });
-        return dom;
+    createMarker(
+        id: number,
+        builder: (record: Record) => string,
+        onClick: () => void = () => this.makeTiledEditWindow(id)
+    ): JQuery {
+        return createMarkerLink(this.createLabel(id, builder), onClick);
     }
 
     createLabel(id: number, builder: (record: Record) => string): string {
@@ -413,14 +415,15 @@ export class Resource {
             recordCollection = await this.state.getRecordCollectionOrFail();
 
             const table = TableWidget(
-                this.info.tableFields.concat('View'),
-                record =>
+                this.info.tableFieldTitles.concat('View'),
+                (record: Record) =>
                     this.info
                         .makeTableRowContent(record)
                         .concat(
-                            ButtonWidget('View', () =>
+                            ButtonWidget('View', () => {
+                                closeThisWindow();
                                 this.makeTiledEditWindow(record.id)
-                            ).dom
+                            }).dom
                         )
             );
 
@@ -443,6 +446,9 @@ export class Resource {
                 windowLabel,
                 onLoad
             );
+            function closeThisWindow() {
+                closeWindow();
+            }
         } catch (err) {
             errorMessage = stringifyError(err);
             const { closeWindow } = useTiledWindow(
@@ -517,6 +523,9 @@ export function addWindow(
     title: string,
     onLoad: Event
 ) {
+    // The onLoad event is triggered BEFORE the window is added. If the first onLoad call fails, no window will be created.
+    onLoad.trigger();
+
     state.tiledWindows.val.push({
         key: windowKey,
         window,
@@ -534,7 +543,6 @@ export function addWindow(
         }
     }
     state.tiledWindows.change.trigger();
-    onLoad.trigger();
 }
 
 export function removeWindow(windowKey: number) {
@@ -595,7 +603,6 @@ export type ResourceFieldInfo = {
 
 export type ResourceInfo = {
     fields: ResourceFieldInfo[];
-    tableFields: string[];
     tableFieldTitles: string[];
     makeTableRowContent: (record: Record) => (JQuery | string)[];
     title: string;
@@ -614,10 +621,6 @@ export function processResourceInfo(
             type
         });
     }
-    let tableFieldTitles: string[] = [];
-    for (const name of conf.tableFields) {
-        tableFieldTitles.push(conf.fieldNameMap[name]);
-    }
     fields = fields.concat([
         {
             title: 'ID',
@@ -632,11 +635,10 @@ export function processResourceInfo(
     ]);
     return {
         fields,
-        tableFields: conf.tableFields,
         makeTableRowContent: conf.makeTableRowContent,
         title: conf.title,
         pluralTitle: conf.pluralTitle,
-        tableFieldTitles,
+        tableFieldTitles: conf.tableFieldTitles,
         makeLabel: conf.makeLabel
     };
 }
@@ -644,7 +646,7 @@ export function processResourceInfo(
 export type UnprocessedResourceInfo = {
     fields: [string, FormFieldType][]; // name, string/number, type
     fieldNameMap: { [name: string]: string };
-    tableFields: string[];
+    tableFieldTitles: string[];
     makeTableRowContent: (record: Record) => (JQuery | string)[];
     title: string;
     pluralTitle: string;
@@ -669,15 +671,28 @@ const fieldNameMap = {
     grade: 'Grade',
     learner: 'Learner',
     tutor: 'Tutor',
-    status: 'Status'
+    status: 'Status',
+    mods: 'Mods',
+    mod: 'Mod',
+    modsPref: 'Preferred mods',
+    subjectList: 'Subjects',
+    request: 'Request',
+    subject: 'Subject(s)'
 };
 const tutorsInfo: UnprocessedResourceInfo = {
-    fields: [...makeBasicStudentConfig()],
+    fields: [
+        ...makeBasicStudentConfig(),
+        ['mods', NumberArrayField('number')],
+        ['modsPref', NumberArrayField('number')],
+        ['subjectList', StringField('text')]
+    ],
     fieldNameMap,
-    tableFields: ['friendlyFullName', 'grade'],
+    tableFieldTitles: ['Name', 'Grade', 'Mods', 'Subjects'],
     makeTableRowContent: record => [
         tutors.createMarker(record.id, x => x.friendlyFullName),
-        record.grade
+        record.grade,
+        generateStringOfMods(record.mods, record.modsPref),
+        record.subjectList
     ],
     title: 'tutor',
     pluralTitle: 'tutors',
@@ -686,7 +701,7 @@ const tutorsInfo: UnprocessedResourceInfo = {
 const learnersInfo: UnprocessedResourceInfo = {
     fields: [...makeBasicStudentConfig()],
     fieldNameMap,
-    tableFields: ['friendlyFullName', 'grade'],
+    tableFieldTitles: ['Name', 'Grade'],
     makeTableRowContent: record => [
         learners.createMarker(record.id, x => x.friendlyFullName),
         record.grade
@@ -696,11 +711,17 @@ const learnersInfo: UnprocessedResourceInfo = {
     makeLabel: record => record.friendlyFullName
 };
 const requestsInfo: UnprocessedResourceInfo = {
-    fields: [['learner', NumberField('id')]],
+    fields: [
+        ['learner', NumberField('id')],
+        ['mods', NumberArrayField('number')],
+        ['subject', StringField('text')]
+    ],
     fieldNameMap,
-    tableFields: ['learner'],
+    tableFieldTitles: ['Learner', 'Subject', 'Mods'],
     makeTableRowContent: record => [
-        learners.createMarker(record.learner, x => x.friendlyFullName)
+        learners.createMarker(record.learner, x => x.friendlyFullName),
+        record.subject,
+        record.mods.join(', ')
     ],
     title: 'request',
     pluralTitle: 'requests',
@@ -710,8 +731,9 @@ const requestsInfo: UnprocessedResourceInfo = {
 
 const bookingsInfo: UnprocessedResourceInfo = {
     fields: [
-        ['learner', NumberField('id')],
+        ['request', NumberField('id')],
         ['tutor', NumberField('id')],
+        ['mod', NumberField('number')],
         [
             'status',
             SelectField(
@@ -737,10 +759,14 @@ const bookingsInfo: UnprocessedResourceInfo = {
         ]
     ],
     fieldNameMap,
-    tableFields: ['learner', 'tutor', 'status'],
+    tableFieldTitles: ['Learner', 'Tutor', 'Mod', 'Status'],
     makeTableRowContent: record => [
-        learners.createMarker(record.learner, x => x.friendlyFullName),
+        learners.createMarker(
+            requests.state.getRecordOrFail(record.request).learner,
+            x => x.friendlyFullName
+        ),
         tutors.createMarker(record.tutor, x => x.friendlyFullName),
+        record.mod,
         record.status
     ],
     title: 'booking',
@@ -755,6 +781,8 @@ const matchingsInfo: UnprocessedResourceInfo = {
     fields: [
         ['learner', StringField('text')],
         ['tutor', StringField('text')],
+        ['subject', StringField('text')],
+        ['mod', NumberField('number')],
         [
             'status',
             SelectField(
@@ -764,10 +792,12 @@ const matchingsInfo: UnprocessedResourceInfo = {
         ]
     ],
     fieldNameMap,
-    tableFields: ['learner', 'tutor', 'status'],
+    tableFieldTitles: ['Learner', 'Tutor', 'Mod', 'Subject', 'Status'],
     makeTableRowContent: record => [
         learners.createMarker(record.learner, x => x.friendlyFullName),
         tutors.createMarker(record.tutor, x => x.friendlyFullName),
+        record.mod,
+        record.subject,
         record.status
     ],
     title: 'matching',
@@ -775,15 +805,21 @@ const matchingsInfo: UnprocessedResourceInfo = {
     makeLabel: record =>
         tutors.state.getRecordOrFail(record.tutor).friendlyFullName +
         ' <> ' +
-        learners.state.getRecordOrFail(record.tutor).friendlyFullName
+        learners.state.getRecordOrFail(record.learner).friendlyFullName
 };
 
 const requestSubmissionsInfo: UnprocessedResourceInfo = {
-    fields: [...makeBasicStudentConfig()],
+    fields: [
+        ...makeBasicStudentConfig(),
+        ['mods', NumberArrayField('number')],
+        ['subject', StringField('text')]
+    ],
     fieldNameMap,
-    tableFields: ['friendlyFullName'],
+    tableFieldTitles: ['Name', 'Mods', 'Subject'],
     makeTableRowContent: record => [
-        requestSubmissions.createMarker(record.id, x => x.friendlyFullName)
+        record.friendlyFullName,
+        record.mods.join(', '),
+        record.subject
     ],
     title: 'request submission',
     pluralTitle: 'request submissions',

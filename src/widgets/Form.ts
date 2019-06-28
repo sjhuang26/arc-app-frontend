@@ -30,6 +30,11 @@ export function FormWidget(fields: ResourceFieldInfo[]): FormWidget {
         },
         setAllValues(values: Record) {
             for (const [name, value] of Object.entries(values)) {
+                if (widgets[name] === undefined) {
+                    throw new Error(
+                        'name ' + String(name) + ' does not exist in form'
+                    );
+                }
                 widgets[name].setValue(value);
             }
         }
