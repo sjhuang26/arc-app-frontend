@@ -1,12 +1,13 @@
-import { onReady, onMount, initializeResources } from './core/shared';
+import { initializeResources } from './core/shared';
 import { rootWidget } from './core/widget';
 
-$(document).ready(onReady.chain);
-
-onReady.listen(async () => {
+console.log('hi there!');
+window['appOnReady'] = async () => {
     // TODO: replace with proper loading widget
-    $('#app').replaceWith($('<h1 id="app">Loading...</h1>'));
+    $('body').append($('<h1 id="app">Loading...</h1>'));
     await initializeResources();
-    $('#app').replaceWith(rootWidget().dom);
-    onMount.trigger();
-});
+    $('body').empty();
+    $('body').append(rootWidget().dom);
+};
+
+$(document).ready(window['appOnReady']);

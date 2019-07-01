@@ -158,18 +158,6 @@ class MockResourceServerEndpoint {
             onClientNotification(['update', this.resource().name, args[1]]);
             return this.success(null);
         }
-        if (args[0] === 'retrieveDefault') {
-            const result = {
-                id: -1,
-                date: Date.now()
-            };
-            for (const { name } of this.resource().info.fields) {
-                if (result[name] === undefined) {
-                    result[name] = '';
-                }
-            }
-            return this.success(result);
-        }
         if (args[0] === 'create') {
             if (args[1].date === -1) {
                 args[1].date = Date.now();

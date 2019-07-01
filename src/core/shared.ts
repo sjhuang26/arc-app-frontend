@@ -92,7 +92,9 @@ export class ObservableState<T> {
     constructor(initialValue: T) {
         this.val = initialValue;
         this.change = new Event();
-        onMount.listen(this.change.chain);
+
+        // TODO: make sure this works
+        this.change.trigger();
     }
     changeTo(val: T) {
         this.val = val;
@@ -142,12 +144,6 @@ export class ResourceEndpoint {
 
     retrieveAll(): Promise<AskFinished<RecordCollection>> {
         return this.askEndpoint('retrieveAll');
-    }
-    retrieveDefault(): Promise<AskFinished<Record>> {
-        return this.askEndpoint('retrieveDefault');
-    }
-    retrieve(id: number): Promise<AskFinished<Record>> {
-        return this.askEndpoint('retrieve', id);
     }
     create(record: Record): Promise<AskFinished<Record>> {
         return this.askEndpoint('create', record);
@@ -495,9 +491,6 @@ export class Resource {
 IMPORTANT GLOBALS
 
 */
-
-export const onReady = new Event();
-export const onMount = new Event();
 
 export const state = {
     tiledWindows: new ObservableState<
