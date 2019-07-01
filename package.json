@@ -1,7 +1,8 @@
 {
     "scripts": {
         "parcel-serve": "parcel ./src/index.html --log-level 4 --no-hmr --no-cache",
-        "parcel-build": "parcel build ./src/index.html --log-level 4 --no-cache --no-minify"
+        "parcel-build": "parcel build ./src/index.html --log-level 4 --no-cache --no-minify",
+        "parcel-build-nomap": "parcel build ./src/index.html --log-level 4 --no-cache --no-minify --no-source-maps"
     },
     "dependencies": {
         "@types/bootstrap": "^4.3.0",

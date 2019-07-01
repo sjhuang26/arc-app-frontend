@@ -2,3 +2,4 @@ node_modules
 .cache
 dist
 arc-app-frontend-server
+yarn-error.log
