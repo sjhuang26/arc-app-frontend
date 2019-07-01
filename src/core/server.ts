@@ -53,7 +53,7 @@ export function getResultOrFail<T>(askFinished: AskFinished<T>): T {
 }
 export async function askServer(args: any[]): Promise<AskFinished<any>> {
     console.log('[server] args', args);
-    const result = await failAfterFiveSeconds(mockServer(args));
+    const result = await failAfterFiveSeconds(realServer(args));
     console.log('[server] result', result);
     return convertServerResponseToAskFinished(result);
 }
@@ -262,6 +262,21 @@ export const mockResourceServerEndpoints = {
     )
 };
 
+async function realServer(args: any[]): Promise<ServerResponse<any>> {
+    try {
+        const val: ServerResponse<any> = await new Promise((res, rej) => {
+            window['google'].script.run.withFailureHandler(rej).withSuccessHandler(res).onClientAsk(args)
+        });
+        // NOTE: an "error: true" response is still received by the client through withSuccessHandler().
+        return val;
+    } catch (err) {
+        return {
+            error: true,
+            val: null,
+            message: stringifyError(err)
+        };
+    }
+}
 async function mockServer(args: any[]): Promise<ServerResponse<any>> {
     // only for resources so far
     try {

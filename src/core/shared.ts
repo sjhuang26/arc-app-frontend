@@ -164,7 +164,7 @@ export class ResourceEndpoint {
 }
 export class ResourceObservable extends ObservableState<
     AskFinished<RecordCollection>
-> {
+    > {
     endpoint: ResourceEndpoint;
 
     constructor(endpoint: ResourceEndpoint) {
@@ -348,7 +348,13 @@ export class Resource {
                 ),
                 ActionBarWidget([
                     ['Delete', () => this.makeTiledDeleteWindow(id)],
-                    ['Save', () => this.endpoint.update(form.getAllValues())],
+                    ['Save', async () => {
+                        closeWindow();
+                        const ask = await this.endpoint.update(form.getAllValues());
+                        if (ask.status === AskStatus.ERROR) {
+                            alert(stringifyError(ask.message));
+                        }
+                    }],
                     ['Close', () => closeWindow()]
                 ]).dom,
                 windowLabel
