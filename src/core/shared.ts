@@ -31,6 +31,18 @@ ALL BASIC CLASSES AND BASIC UTILS
 
 */
 
+// This function converts mod numbers (ie. 11) into A-B-day strings (ie. 1B).
+// The function is not used often because we expect users of the app to be able to
+// work with the 1-20 mod notation.
+export function stringifyMod(mod: number) {
+    if (1 <= mod && mod <= 10) {
+        return String(mod) + 'A';
+    } else if (11 <= mod && mod <= 20) {
+        return String(mod - 10) + 'B';
+    }
+    throw new Error(`mod ${mod} isn't serializable`);
+}
+
 export function stringifyError(error: any) {
     console.error(error);
     if (error instanceof Error) {
@@ -313,15 +325,19 @@ export class Resource {
     }
 
     createLabel(id: number, builder: (record: Record) => string): string {
-        const record = this.state.getRecordOrFail(id);
-        return builder.call(null, record);
+        try {
+            const record = this.state.getRecordOrFail(id);
+            return builder.call(null, record);
+        } catch (e) {
+            console.error(e);
+            return '(??? UNKNOWN ???)';
+        }
     }
 
     // The edit window is kind of combined with the view window.
     async makeTiledEditWindow(id: number): Promise<void> {
         let record: Record = null;
         let errorMessage: string = '';
-        let windowLabel: string = 'ERROR in: ' + this.info.title + ' #' + id;
         try {
             function capitalizeWord(w: string) {
                 return w.charAt(0).toUpperCase() + w.slice(1);
@@ -329,7 +345,7 @@ export class Resource {
 
             await this.state.getRecordCollectionOrFail();
             record = this.state.getRecordOrFail(id);
-            windowLabel =
+            const windowLabel =
                 capitalizeWord(this.info.title) +
                 ': ' +
                 this.createLabel(id, this.info.makeLabel);
@@ -343,10 +359,10 @@ export class Resource {
                     form.dom
                 ),
                 ActionBarWidget([
-                    ['Delete', () => this.makeTiledDeleteWindow(id)],
+                    ['Delete', () => this.makeTiledDeleteWindow(id, () => closeWindow())],
                     ['Save', async () => {
                         closeWindow();
-                        const ask = await this.endpoint.update(form.getAllValues());
+                        const ask = await this.state.updateRecord(form.getAllValues());
                         if (ask.status === AskStatus.ERROR) {
                             alert(stringifyError(ask.message));
                         }
@@ -356,6 +372,7 @@ export class Resource {
                 windowLabel
             );
         } catch (err) {
+            const windowLabel = 'ERROR in: ' + this.info.title + ' #' + id;
             errorMessage = stringifyError(err);
             const { closeWindow } = useTiledWindow(
                 ErrorWidget(errorMessage).dom,
@@ -367,10 +384,9 @@ export class Resource {
 
     async makeTiledCreateWindow(): Promise<void> {
         let errorMessage: string = '';
-        let windowLabel: string = 'ERROR in: create new ' + this.info.title;
         try {
             await this.state.getRecordCollectionOrFail();
-            windowLabel = 'Create new ' + this.info.title;
+            const windowLabel = 'Create new ' + this.info.title;
 
             const form = this.makeFormWidget();
             form.setAllValues({ id: -1, date: Date.now() });
@@ -398,6 +414,7 @@ export class Resource {
                 windowLabel
             );
         } catch (err) {
+            const windowLabel = 'ERROR in: create new ' + this.info.title;
             errorMessage = stringifyError(err);
             const { closeWindow } = useTiledWindow(
                 ErrorWidget(errorMessage).dom,
@@ -410,7 +427,6 @@ export class Resource {
     async makeTiledViewAllWindow(): Promise<void> {
         let recordCollection: RecordCollection = null;
         let errorMessage: string = '';
-        let windowLabel: string = 'ERROR in: view all ' + this.info.pluralTitle;
         try {
             const onLoad = new Event();
 
@@ -434,7 +450,7 @@ export class Resource {
                 table.setAllValues(recordCollection);
             });
 
-            windowLabel = 'View all ' + this.info.pluralTitle;
+            const windowLabel = 'View all ' + this.info.pluralTitle;
 
             const { closeWindow } = useTiledWindow(
                 container('<div></div>')(
@@ -453,6 +469,7 @@ export class Resource {
             }
         } catch (err) {
             errorMessage = stringifyError(err);
+            const windowLabel = 'ERROR in: view all ' + this.info.pluralTitle;
             const { closeWindow } = useTiledWindow(
                 ErrorWidget(errorMessage).dom,
                 ActionBarWidget([
@@ -464,7 +481,7 @@ export class Resource {
         }
     }
 
-    makeTiledDeleteWindow(id: number) {
+    makeTiledDeleteWindow(id: number, closeParentWindow: () => void) {
         const windowLabel =
             'Delete this ' +
             this.info.title +
@@ -480,8 +497,10 @@ export class Resource {
                 [
                     'Delete',
                     () =>
-                        this.endpoint
-                            .delete(id)
+                        this.state
+                            .deleteRecord(id)
+                            .then(() => closeParentWindow())
+                            .then(() => closeWindow())
                             .then(() => alert('Deletion successful!'))
                 ],
                 ['Cancel', () => closeWindow]
@@ -658,7 +677,11 @@ export function makeBasicStudentConfig(): [string, FormFieldType][] {
         ['lastName', StringField('text')],
         ['friendlyName', StringField('text')],
         ['friendlyFullName', StringField('text')],
-        ['grade', NumberField('number')]
+        ['grade', NumberField('number')],
+        ['studentId', NumberField('number')],
+        ['email', StringField('email')],
+        ['phone', StringField('string')],
+        ['contactPref', SelectField(['email', 'phone', 'either'], ['Email', 'Phone', 'Either'])]
     ];
 }
 
@@ -676,7 +699,12 @@ const fieldNameMap = {
     modsPref: 'Preferred mods',
     subjectList: 'Subjects',
     request: 'Request',
-    subject: 'Subject(s)'
+    subject: 'Subject(s)',
+    studentId: 'Student ID',
+    email: 'Email',
+    phone: 'Phone',
+    contactPref: 'Contact preference',
+    specialRoom: 'Special tutoring room'
 };
 const tutorsInfo: UnprocessedResourceInfo = {
     fields: [
@@ -713,7 +741,8 @@ const requestsInfo: UnprocessedResourceInfo = {
     fields: [
         ['learner', NumberField('id')],
         ['mods', NumberArrayField('number')],
-        ['subject', StringField('text')]
+        ['subject', StringField('text')],
+        ['specialRoom', StringField('text')]
     ],
     fieldNameMap,
     tableFieldTitles: ['Learner', 'Subject', 'Mods'],
@@ -725,7 +754,7 @@ const requestsInfo: UnprocessedResourceInfo = {
     title: 'request',
     pluralTitle: 'requests',
     makeLabel: record =>
-        learners.createLabel(record.id, x => x.friendlyFullName)
+        learners.createLabel(record.learner, x => x.friendlyFullName)
 };
 
 const bookingsInfo: UnprocessedResourceInfo = {
@@ -773,7 +802,7 @@ const bookingsInfo: UnprocessedResourceInfo = {
     makeLabel: record =>
         tutors.state.getRecordOrFail(record.tutor).friendlyFullName +
         ' <> ' +
-        learners.state.getRecordOrFail(record.tutor).friendlyFullName
+        learners.state.getRecordOrFail(requests.state.getRecordOrFail(record.request).learner).friendlyFullName
 };
 
 const matchingsInfo: UnprocessedResourceInfo = {
@@ -788,7 +817,8 @@ const matchingsInfo: UnprocessedResourceInfo = {
                 ['unwritten', 'unsent', 'finalized'],
                 ['Unwritten', 'Unsent', 'Finalized']
             )
-        ]
+        ],
+        ['specialRoom', StringField('text')]
     ],
     fieldNameMap,
     tableFieldTitles: ['Learner', 'Tutor', 'Mod', 'Subject', 'Status'],
@@ -811,7 +841,9 @@ const requestSubmissionsInfo: UnprocessedResourceInfo = {
     fields: [
         ...makeBasicStudentConfig(),
         ['mods', NumberArrayField('number')],
-        ['subject', StringField('text')]
+        ['subject', StringField('text')],
+        ['specialRoom', StringField('text')],
+        ['status', StringField('text')]
     ],
     fieldNameMap,
     tableFieldTitles: ['Name', 'Mods', 'Subject'],

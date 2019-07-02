@@ -252,11 +252,11 @@ export const mockResourceServerEndpoints = {
 
 async function realServer(args: any[]): Promise<ServerResponse<any>> {
     try {
-        const val: ServerResponse<any> = await new Promise((res, rej) => {
+        const val: string = await new Promise((res, rej) => {
             window['google'].script.run.withFailureHandler(rej).withSuccessHandler(res).onClientAsk(args)
         });
         // NOTE: an "error: true" response is still received by the client through withSuccessHandler().
-        return val;
+        return JSON.parse(val);
     } catch (err) {
         return {
             error: true,
@@ -279,15 +279,5 @@ async function mockServer(args: any[]): Promise<ServerResponse<any>> {
             val: null,
             message: stringifyError(err)
         };
-    }
-}
-
-export namespace serverMethods {
-    export async function refreshRequestSubmissionsWithForm() {
-        return askServer(['refreshRequestSubmissionsWithForm']);
-    }
-
-    export async function debug() {
-        return askServer(['debug']);
     }
 }

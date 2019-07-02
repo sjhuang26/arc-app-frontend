@@ -11,7 +11,8 @@ import {
     Event,
     RecordCollection,
     stringifyError,
-    Record
+    Record,
+    stringifyMod
 } from './shared';
 import {
     ButtonWidget,
@@ -81,7 +82,7 @@ const pillsString = `
     </li>
     <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle" data-toggle="dropdown">Steps</a>
-        <div class="dropdown-menu">
+        <div class="dropdown-menu dropdown-menu-right">
             <a class="dropdown-item">Check request submissions</a>
             <a class="dropdown-item">Handle requests and bookings</a>
             <a class="dropdown-item">Finalize matchings</a>
@@ -89,7 +90,7 @@ const pillsString = `
     </li>
     <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle" data-toggle="dropdown">Other</a>
-        <div class="dropdown-menu">
+        <div class="dropdown-menu dropdown-menu-right">
             <a class="dropdown-item">About</a>
             <a class="dropdown-item">Force refresh</a>
         </div>
@@ -104,7 +105,6 @@ async function simpleStepWindow(
         defaultWindowLabel = container('<span></span>')(defaultWindowLabel);
 
     let errorMessage: string = '';
-    let windowLabel: string = 'ERROR in: ' + defaultWindowLabel.text();
     try {
         const { closeWindow } = useTiledWindow(
             container('<div></div>')(
@@ -115,6 +115,7 @@ async function simpleStepWindow(
             defaultWindowLabel.text()
         );
     } catch (err) {
+        const windowLabel = 'ERROR in: ' + defaultWindowLabel.text();
         errorMessage = stringifyError(err);
         const { closeWindow } = useTiledWindow(
             ErrorWidget(errorMessage).dom,
@@ -138,24 +139,22 @@ async function checkRequestSubmissionsStep() {
             (record: Record) => {
                 async function attemptConversion() {
                     // CREATE LEARNER
-                    const learnerRecords: Record[] = Object.values(
+                    // try to dig up a learner with matching student ID, which would mean
+                    // that the learner already exists in the database
+                    const matches: Record[] = Object.values(
                         learners.state.getRecordCollectionOrFail()
                     ).filter(
                         x =>
-                            x.firstName == record.firstName &&
-                            x.lastName == record.lastName
+                            x.studentId === record.studentId
                     );
                     let learnerRecord: Record;
-                    if (learnerRecords.length > 1) {
-                        // duplicate learner names??
+                    if (matches.length > 1) {
+                        // duplicate learner student IDs??
                         // this should be validated in the database
                         throw new Error(
-                            'duplicate learner names: ' +
-                                String(record.firstName) +
-                                '/' +
-                                String(record.lastName)
+                            `duplicate student id: "${record.studentId}"`
                         );
-                    } else if (learnerRecords.length == 0) {
+                    } else if (matches.length == 0) {
                         // create new learner
                         learnerRecord = getResultOrFail(
                             await learners.state.createRecord({
@@ -165,12 +164,16 @@ async function checkRequestSubmissionsStep() {
                                 friendlyFullName: record.friendlyFullName,
                                 grade: record.grade,
                                 id: -1,
-                                date: -1
+                                date: -1,
+                                studentId: record.studentId,
+                                email: record.email,
+                                phone: record.phone,
+                                contactPref: record.contactPref
                             })
                         );
                     } else {
                         // learner already exists
-                        learnerRecord = learners[0];
+                        learnerRecord = matches[0];
                     }
 
                     // CREATE REQUEST
@@ -180,15 +183,17 @@ async function checkRequestSubmissionsStep() {
                             id: -1,
                             date: -1,
                             mods: record.mods,
-                            subject: record.subject
+                            subject: record.subject,
+                            specialRoom: record.specialRoom
                         })
                     );
 
-                    // DELETE REQUEST SUBMISSION
+                    // MARK REQUEST SUBMISSION AS CHECKED
                     // NOTE: this is only done if the above steps worked
                     // so if there's an error, the request submission won't be obliterated
+                    record.status = 'checked';
                     getResultOrFail(
-                        await requestSubmissions.state.deleteRecord(record.id)
+                        await requestSubmissions.state.updateRecord(record)
                     );
                 }
                 return [
@@ -219,9 +224,7 @@ async function checkRequestSubmissionsStep() {
                 ];
             }
         );
-        // Because request submissions are deleted as soon as they are processed into requests, there is no need to distinguish between "unfinalized" and "finalized" request submissions.
-        // Thus, there is no filter for this step.
-        table.setAllValues(recordCollection);
+        table.setAllValues(Object.values(recordCollection).filter(x => x.status === 'unchecked'));
         return table.dom;
     });
 }
@@ -328,10 +331,10 @@ async function showRequestBookerStep(requestId: number) {
     };
     await simpleStepWindow(
         'Booker for ' +
-            learners.createLabel(
-                requests.state.getRecordOrFail(requestId).learner,
-                x => x.friendlyFullName
-            ),
+        learners.createLabel(
+            requests.state.getRecordOrFail(requestId).learner,
+            x => x.friendlyFullName
+        ),
         closeWindow => {
             const matchingRecords = matchings.state.getRecordCollectionOrFail();
             const bookingRecords = bookings.state.getRecordCollectionOrFail();
@@ -342,18 +345,18 @@ async function showRequestBookerStep(requestId: number) {
                     const formSelectWidget = FormSelectWidget(
                         [
                             'unsent',
-                            'waitingForLearner',
                             'waitingForTutor',
-                            'rejected',
+                            'waitingForLearner',
+                            'rejectedByTutor',
                             'rejectedByLearner',
-                            'rejectedByTutor'
+                            'rejected'
                         ],
                         [
                             'Unsent',
-                            'Waiting for learner',
                             'Waiting for tutor',
-                            'Rejected by learner',
+                            'Waiting for learner',
                             'Rejected by tutor',
+                            'Rejected by learner',
                             'Rejected for other reason'
                         ]
                     );
@@ -372,12 +375,12 @@ async function showRequestBookerStep(requestId: number) {
                             booking.tutor,
                             x => x.friendlyFullName
                         ) +
-                            ' <> ' +
-                            learners.createLabel(
-                                requests.state.getRecordOrFail(booking.request)
-                                    .learner,
-                                x => x.friendlyFullName
-                            ),
+                        ' <> ' +
+                        learners.createLabel(
+                            requests.state.getRecordOrFail(booking.request)
+                                .learner,
+                            x => x.friendlyFullName
+                        ),
                         formSelectWidget.dom,
                         ButtonWidget('Todo', () =>
                             showBookingMessagerStep(booking.id)
@@ -404,7 +407,7 @@ async function showRequestBookerStep(requestId: number) {
                             buttonsDom.append(
                                 ButtonWidget(
                                     modLabel + ' (already booked)',
-                                    () => {}
+                                    () => { }
                                 ).dom
                             );
                             continue;
@@ -547,24 +550,7 @@ async function showBookingMessagerStep(bookingId: number) {
                 );
                 dom.append(
                     MessageTemplateWidget(
-                        `Hi! Can you tutor a student in ${r.subject} on mod ${b.mod}?`
-                    ).dom
-                );
-                dom.append(
-                    $(
-                        '<p>Once you send the message, go back and set the status to "waiting for learner".</p>'
-                    )
-                );
-            }
-            if (b.status === 'waitingForLearner') {
-                dom.append(
-                    $(
-                        '<p>You are waiting for the learner. Once the tutor replies, send a message to the learner:</p>'
-                    )
-                );
-                dom.append(
-                    MessageTemplateWidget(
-                        `Hi! We have a tutor for you on mod ${b.mod}. Can you come?`
+                        `Hi! Can you tutor a student in ${r.subject} on mod ${stringifyMod(b.mod)}?`
                     ).dom
                 );
                 dom.append(
@@ -574,6 +560,23 @@ async function showBookingMessagerStep(bookingId: number) {
                 );
             }
             if (b.status === 'waitingForTutor') {
+                dom.append(
+                    $(
+                        '<p>You are waiting for the tutor. Once the tutor replies, send a message to the learner:</p>'
+                    )
+                );
+                dom.append(
+                    MessageTemplateWidget(
+                        `Hi! We have a tutor for you on mod ${stringifyMod(b.mod)}. Can you come?`
+                    ).dom
+                );
+                dom.append(
+                    $(
+                        '<p>Once you send the message, go back and set the status to "waiting for learner".</p>'
+                    )
+                );
+            }
+            if (b.status === 'waitingForLearner') {
                 dom.append(
                     $(
                         '<p>You are waiting for the learner. Once the learner replies, if everything is good, go back and click "finalize".</p>'
@@ -593,7 +596,7 @@ async function finalizeBookingsStep(
     if (
         await isOperationConfirmedByUser({
             thisOpDoes: [
-                'Assigns the tutor to the learner, replacing the booking with a matching (this can be undone by deleting the matching and rebooking the )',
+                'Assigns the tutor to the learner, replacing the booking with a matching (this can be undone by deleting the matching and rebooking)',
                 'Deletes all other bookings associated with the learner'
             ],
             makeSureThat: ['The tutor and learner really should be matched']
@@ -610,6 +613,7 @@ async function finalizeBookingsStep(
                 subject: r.subject,
                 mod: b.mod,
                 status: 'unwritten',
+                specialRoom: r.specialRoom,
                 id: -1,
                 date: -1
             });
@@ -658,11 +662,11 @@ async function finalizeMatchingsStep() {
                         record.learner,
                         x => x.friendlyFullName
                     ) +
-                        '<>' +
-                        tutors.createLabel(
-                            record.tutor,
-                            x => x.friendlyFullName
-                        ),
+                    '<>' +
+                    tutors.createLabel(
+                        record.tutor,
+                        x => x.friendlyFullName
+                    ),
                     formSelectWidget.dom,
                     ButtonWidget('Send', () => {
                         showMatchingSender(record.id);
@@ -697,11 +701,11 @@ async function showMatchingSender(matchingId: number) {
             return container('<div></div>')(
                 'Send this to the learner.',
                 MessageTemplateWidget(
-                    `You will be tutored by ${t.friendlyFullName} during mod ${m.mod}.`
-                ),
+                    `You will be tutored by ${t.friendlyFullName} during mod ${stringifyMod(m.mod)}.`
+                ).dom,
                 'Then, send this to the tutor.',
                 MessageTemplateWidget(
-                    `You will be tutoring ${l.friendlyFullName} during mod ${m.mod}.`
+                    `You will be tutoring ${l.friendlyFullName} during mod ${stringifyMod(m.mod)}.`
                 ).dom
             );
         }
@@ -775,7 +779,10 @@ export function rootWidget(): Widget {
     }
 
     const dom = container('<div id="app" class="layout-v"></div>')(
-        container('<nav class="navbar layout-item-fit">')(PillsWidget().dom),
+        container('<nav class="navbar layout-item-fit">')(
+            $('<strong class="mr-4">ARC</strong>'),
+            PillsWidget().dom
+        ),
         container('<nav class="navbar layout-item-fit layout-v"></div>')(
             WindowsBarWidget().dom
         ),
