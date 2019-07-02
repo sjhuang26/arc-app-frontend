@@ -16,7 +16,10 @@ import {
     ErrorWidget,
     ButtonWidget,
     NumberArrayField,
-    createMarkerLink
+    createMarkerLink,
+    FormJsonInputWidget,
+    JsonField,
+    showModal
 } from '../widgets/ui';
 import { ActionBarWidget } from '../widgets/ActionBar';
 import { TableWidget } from '../widgets/Table';
@@ -31,6 +34,16 @@ ALL BASIC CLASSES AND BASIC UTILS
 
 */
 
+export async function alertError(err: any): Promise<void> {
+    await showModal('Error!',
+        container('<div>')(
+            $('<p><b>There was an error.</b></p>'),
+            container('<p>')(stringifyError(err))
+        ),
+        bb => [bb('OK', 'primary')]
+    );
+}
+
 // This function converts mod numbers (ie. 11) into A-B-day strings (ie. 1B).
 // The function is not used often because we expect users of the app to be able to
 // work with the 1-20 mod notation.
@@ -43,15 +56,16 @@ export function stringifyMod(mod: number) {
     throw new Error(`mod ${mod} isn't serializable`);
 }
 
-export function stringifyError(error: any) {
+export function stringifyError(error: any): string {
     console.error(error);
     if (error instanceof Error) {
         return JSON.stringify(error, Object.getOwnPropertyNames(error));
     }
-    if (typeof error === 'object') {
+    try {
         return JSON.stringify(error);
+    } catch (unusedError) {
+        return String(error);
     }
-    return error;
 }
 
 export class Event {
@@ -330,7 +344,7 @@ export class Resource {
             return builder.call(null, record);
         } catch (e) {
             console.error(e);
-            return '(??? UNKNOWN ???)';
+            return `(??? UNKNOWN #${String(id)} ???)`;
         }
     }
 
@@ -364,7 +378,7 @@ export class Resource {
                         closeWindow();
                         const ask = await this.state.updateRecord(form.getAllValues());
                         if (ask.status === AskStatus.ERROR) {
-                            alert(stringifyError(ask.message));
+                            alertError(ask.message);
                         }
                     }],
                     ['Close', () => closeWindow()]
@@ -400,16 +414,17 @@ export class Resource {
                     [
                         'Create',
                         async () => {
-                            const ask = await this.state.createRecord(
-                                form.getAllValues()
-                            );
-                            if (ask.status === AskStatus.ERROR) {
-                                alert('ERROR!\n' + stringifyError(ask.message));
+                            try {
+                                getResultOrFail(await this.state.createRecord(
+                                    form.getAllValues()
+                                ));
+                                closeWindow();
+                            } catch (err) {
+                                alertError(err);
                             }
-                            closeWindow();
                         }
                     ],
-                    ['Close', () => closeWindow()]
+                    ['Cancel', () => closeWindow()]
                 ]).dom,
                 windowLabel
             );
@@ -458,7 +473,10 @@ export class Resource {
                     table.dom
                 ),
                 ActionBarWidget([
-                    ['Create', () => this.makeTiledCreateWindow()],
+                    ['Create', () => {
+                        closeWindow();
+                        this.makeTiledCreateWindow();
+                    }],
                     ['Close', () => closeWindow()]
                 ]).dom,
                 windowLabel,
@@ -473,7 +491,6 @@ export class Resource {
             const { closeWindow } = useTiledWindow(
                 ErrorWidget(errorMessage).dom,
                 ActionBarWidget([
-                    ['Create', () => this.makeTiledCreateWindow()],
                     ['Close', () => closeWindow()]
                 ]).dom,
                 windowLabel
@@ -501,7 +518,7 @@ export class Resource {
                             .deleteRecord(id)
                             .then(() => closeParentWindow())
                             .then(() => closeWindow())
-                            .then(() => alert('Deletion successful!'))
+                            .catch((err) => alertError(err))
                 ],
                 ['Cancel', () => closeWindow]
             ]).dom,
@@ -617,6 +634,7 @@ export type ResourceFieldInfo = {
     title: string;
     name: string;
     type: FormFieldType;
+    info?: string;
 };
 
 export type ResourceInfo = {
@@ -631,26 +649,20 @@ export type ResourceInfo = {
 export function processResourceInfo(
     conf: UnprocessedResourceInfo
 ): ResourceInfo {
+    conf.fields.push(
+        ['id', NumberField('number')],
+        ['date', NumberField('datetime-local')]
+    );
     let fields: ResourceFieldInfo[] = [];
     for (const [name, type] of conf.fields) {
+        const x = conf.fieldNameMap[name];
         fields.push({
-            title: conf.fieldNameMap[name],
+            title: typeof x === 'string' ? x : x[0],
+            ...(Array.isArray(x) && { info: x[1] }),
             name,
             type
         });
     }
-    fields = fields.concat([
-        {
-            title: 'ID',
-            name: 'id',
-            type: NumberField('number')
-        },
-        {
-            title: 'Date',
-            name: 'date',
-            type: NumberField('datetime-local')
-        }
-    ]);
     return {
         fields,
         makeTableRowContent: conf.makeTableRowContent,
@@ -661,9 +673,12 @@ export function processResourceInfo(
     };
 }
 
+export type FieldNameMap =
+    { [name: string]: string | [string, string] };
+
 export type UnprocessedResourceInfo = {
     fields: [string, FormFieldType][]; // name, string/number, type
-    fieldNameMap: { [name: string]: string };
+    fieldNameMap: FieldNameMap; // name | [name, info?]
     tableFieldTitles: string[];
     makeTableRowContent: (record: Record) => (JQuery | string)[];
     title: string;
@@ -685,33 +700,37 @@ export function makeBasicStudentConfig(): [string, FormFieldType][] {
     ];
 }
 
-const fieldNameMap = {
+const fieldNameMap: FieldNameMap = {
     firstName: 'First name',
     lastName: 'Last name',
     friendlyName: 'Friendly name',
     friendlyFullName: 'Friendly full name',
-    grade: 'Grade',
-    learner: 'Learner',
-    tutor: 'Tutor',
+    grade: ['Grade', 'A number from 9-12'],
+    learner: ['Learner', 'This is an ID. You usually will not need to edit this by hand.'],
+    tutor: ['Tutor', 'This is an ID. You usually will not need to edit this by hand.'],
+    attendance: ['Attendance data', 'Do not edit this by hand.'],
     status: 'Status',
-    mods: 'Mods',
-    mod: 'Mod',
-    modsPref: 'Preferred mods',
+    mods: ['Mods', 'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'],
+    mod: ['Mod', 'A number from 1-20, corresponding to 1A-10B'],
+    modsPref: ['Preferred mods', 'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'],
     subjectList: 'Subjects',
-    request: 'Request',
+    request: ['Request', 'This is an ID. You usually will not need to edit this by hand.'],
     subject: 'Subject(s)',
     studentId: 'Student ID',
     email: 'Email',
     phone: 'Phone',
     contactPref: 'Contact preference',
-    specialRoom: 'Special tutoring room'
+    specialRoom: ['Special tutoring room', `Leave blank if the student isn't in special tutoring`],
+    id: ['ID', `Do not modify unless you really know what you're doing!`],
+    date: ['Date', 'Date of creation -- do not change']
 };
 const tutorsInfo: UnprocessedResourceInfo = {
     fields: [
         ...makeBasicStudentConfig(),
         ['mods', NumberArrayField('number')],
         ['modsPref', NumberArrayField('number')],
-        ['subjectList', StringField('text')]
+        ['subjectList', StringField('text')],
+        ['attendance', JsonField({})]
     ],
     fieldNameMap,
     tableFieldTitles: ['Name', 'Grade', 'Mods', 'Subjects'],
@@ -726,7 +745,7 @@ const tutorsInfo: UnprocessedResourceInfo = {
     makeLabel: record => record.friendlyFullName
 };
 const learnersInfo: UnprocessedResourceInfo = {
-    fields: [...makeBasicStudentConfig()],
+    fields: [...makeBasicStudentConfig(), ['attendance', JsonField({})]],
     fieldNameMap,
     tableFieldTitles: ['Name', 'Grade'],
     makeTableRowContent: record => [
@@ -843,7 +862,7 @@ const requestSubmissionsInfo: UnprocessedResourceInfo = {
         ['mods', NumberArrayField('number')],
         ['subject', StringField('text')],
         ['specialRoom', StringField('text')],
-        ['status', StringField('text')]
+        ['status', SelectField(['unchecked', 'checked'], ['Unchecked', 'Checked'])]
     ],
     fieldNameMap,
     tableFieldTitles: ['Name', 'Mods', 'Subject'],

@@ -8,20 +8,17 @@ import {
     requestSubmissions,
     matchings,
     bookings,
-    Event,
-    RecordCollection,
     stringifyError,
     Record,
-    stringifyMod
+    stringifyMod,
+    alertError
 } from './shared';
 import {
     ButtonWidget,
     showModal,
     ErrorWidget,
     FormSelectWidget,
-    createMarkerLink,
     FormToggleWidget,
-    FormValueWidget,
     MessageTemplateWidget
 } from '../widgets/ui';
 import { TilingWindowManagerWidget } from '../widgets/TilingWindowManager';
@@ -62,37 +59,34 @@ async function isOperationConfirmedByUser(args: {
 
 const pillsString = `
 <ul class="nav nav-pills">
-    <li class="nav-item">
-        <a class="nav-link">Tutors</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link">Learners</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link">Requests</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link">Request submissions</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link">Bookings</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link">Matchings</a>
+    <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle" data-toggle="dropdown">View, edit, and add information</a>
+        <div class="dropdown-menu dropdown-menu-right">
+            <a class="dropdown-item">Tutors</a>
+            <a class="dropdown-item">Learners</a>
+            <a class="dropdown-item">Requests</a>
+            <a class="dropdown-item">Request submissions</a>
+            <a class="dropdown-item">Bookings</a>
+            <a class="dropdown-item">Matchings</a>
+        </div>
     </li>
     <li class="nav-item dropdown">
-        <a class="nav-link dropdown-toggle" data-toggle="dropdown">Steps</a>
+        <a class="nav-link dropdown-toggle" data-toggle="dropdown">Scheduling workflow</a>
         <div class="dropdown-menu dropdown-menu-right">
             <a class="dropdown-item">Check request submissions</a>
             <a class="dropdown-item">Handle requests and bookings</a>
             <a class="dropdown-item">Finalize matchings</a>
         </div>
     </li>
+    <li class="nav-item">
+        <a class="nav-link">Attendance</a>
+    </li>
     <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle" data-toggle="dropdown">Other</a>
         <div class="dropdown-menu dropdown-menu-right">
             <a class="dropdown-item">About</a>
             <a class="dropdown-item">Force refresh</a>
+            <a class="dropdown-item">Testing mode</a>
         </div>
     </li>
 </ul>`;
@@ -168,7 +162,8 @@ async function checkRequestSubmissionsStep() {
                                 studentId: record.studentId,
                                 email: record.email,
                                 phone: record.phone,
-                                contactPref: record.contactPref
+                                contactPref: record.contactPref,
+                                attendance: {}
                             })
                         );
                     } else {
@@ -217,7 +212,7 @@ async function checkRequestSubmissionsStep() {
                                 closeWindow()();
                                 await attemptConversion();
                             } catch (err) {
-                                alert(stringifyError(err));
+                                alertError(err);
                             }
                         }
                     }).dom
@@ -367,7 +362,7 @@ async function showRequestBookerStep(requestId: number) {
                             booking
                         );
                         if (response.status === AskStatus.ERROR) {
-                            alert('ERROR!\n' + response.message);
+                            alertError(response.message);
                         }
                     });
                     return [
@@ -386,7 +381,7 @@ async function showRequestBookerStep(requestId: number) {
                             showBookingMessagerStep(booking.id)
                         ).dom,
                         ButtonWidget('Finalize', () => {
-                            finalizeBookingsStep(booking.id, closeWindow());
+                            finalizeBookingsStep(booking.id, () => closeWindow()());
                         }).dom
                     ];
                 }
@@ -395,7 +390,7 @@ async function showRequestBookerStep(requestId: number) {
             // - There is a row of mod buttons
             // - There is add functionality, but not delete functionality (bookings can be individually deleted)
             // - Toggling the button toggles entries in a temporary array of all added bookings [[tutor, mod]] via. filters
-            // - Clicking "Save your bookings" will write to the database
+            // - Clicking "Save bookings and close" will write to the database
             let bookingsInfo: { tutorId: number; mod: number }[] = [];
             const potentialTable = TableWidget(
                 ['Tutor', '# times booked', 'Book for mods...'],
@@ -439,11 +434,11 @@ async function showRequestBookerStep(requestId: number) {
                 }
             );
             const saveBookingsButton = ButtonWidget(
-                'Save your bookings',
+                'Save bookings and close',
                 async () => {
+                    closeWindow()();
                     try {
                         for (const { tutorId, mod } of bookingsInfo) {
-                            closeWindow()();
                             const ask = await bookings.state.createRecord({
                                 id: -1,
                                 date: -1,
@@ -457,7 +452,7 @@ async function showRequestBookerStep(requestId: number) {
                             }
                         }
                     } catch (err) {
-                        alert(err);
+                        alertError(err);
                     }
                 }
             );
@@ -654,7 +649,7 @@ async function finalizeMatchingsStep() {
                     record.status = newVal;
                     const response = await matchings.state.updateRecord(record);
                     if (response.status === AskStatus.ERROR) {
-                        alert('ERROR!\n' + response.message);
+                        alertError(response.message);
                     }
                 });
                 return [
@@ -728,6 +723,77 @@ async function finalizeMatching(matchingId: number, onVerify: () => void) {
         matchings.state.updateRecord(r);
     }
 }
+
+async function attendanceStep() {
+    await simpleStepWindow('Attendance', _closeWindow => {
+        const t = Object.values(tutors.state.getRecordCollectionOrFail());
+        const l = Object.values(learners.state.getRecordCollectionOrFail());
+        const table = TableWidget(
+            // Both learners and tutors are students.
+            ['Student', 'Total minutes', 'Attendance level', 'Details'],
+            ({ isLearner, student }: { isLearner: boolean, student: Record }) => {
+                // calculate the attendance level & totals
+                let numPresent = 0;
+                let numAbsent = 0;
+                let totalMinutes = 0;
+                for (const x of Object.values<any>(student.attendance)) {
+                    for (const { minutes } of x) {
+                        if (minutes > 0) {
+                            ++numPresent;
+                        } else {
+                            ++numAbsent;
+                        }
+                        totalMinutes += minutes;
+                    }
+                }
+                return [
+                    (isLearner ? learners : tutors).createLabel(
+                        student.id,
+                        x => x.friendlyFullName
+                    ),
+                    String(totalMinutes),
+                    `${numPresent}P / ${numAbsent}A`,
+                    ButtonWidget('Details', () => {
+                        attendanceDetailsStep({ isLearner, student });
+                    }).dom
+                ];
+            }
+        );
+        table.setAllValues(t.map(x => ({ isLearner: false, student: x }))
+            .concat(l.map(x => ({ isLearner: true, student: x })))
+        );
+        return table.dom;
+    });
+}
+
+async function attendanceDetailsStep({ isLearner, student }: { isLearner: boolean, student: Record }) {
+    await simpleStepWindow(container('<span>')(
+        'Attendance for ',
+        (isLearner ? learners : tutors).createMarker(student.id, x => x.friendlyFullName)),
+        _closeWindow => {
+            const table = TableWidget(
+                // Both learners and tutors are students.
+                ['Date', 'Mod', 'Present?'],
+                (attendanceEntry: { date: number, mod: number, minutes: number }) => {
+                    return [
+                        new Date(attendanceEntry.date).toISOString().substring(0, 10),
+                        String(attendanceEntry.mod),
+                        attendanceEntry.minutes > 0 ? `P (${attendanceEntry.minutes} minutes)` : $('<span style="color:red">ABSENT</span>')
+                    ];
+                }
+            );
+            const attendanceData = [];
+            for (const x of Object.values<any>(student.attendance)) {
+                for (const y of x) {
+                    attendanceData.push(y);
+                }
+            }
+            table.setAllValues(attendanceData);
+            return table.dom;
+        }
+    );
+}
+
 /*
 
 ROOT WIDGET
@@ -764,6 +830,19 @@ export function rootWidget(): Widget {
                         window.onLoad.trigger();
                     }
                 }
+                if (text == 'Testing mode') {
+                    window['APP_DEBUG_MOCK'] = 1;
+                    tutors.state.forceRefresh();
+                    learners.state.forceRefresh();
+                    bookings.state.forceRefresh();
+                    matchings.state.forceRefresh();
+                    requests.state.forceRefresh();
+                    requestSubmissions.state.forceRefresh();
+                    for (const window of state.tiledWindows.val) {
+                        window.onLoad.trigger();
+                    }
+                    showModal('Testing mode loaded', 'The app has been disconnected from the actual database/forms and replaced with a blank test database with no data. Start by creating a tutor, learner, and request submission.', bb => [bb('OK', 'primary')]);
+                }
                 if (text == 'Check request submissions') {
                     checkRequestSubmissionsStep();
                 }
@@ -772,6 +851,9 @@ export function rootWidget(): Widget {
                 }
                 if (text == 'Finalize matchings') {
                     finalizeMatchingsStep();
+                }
+                if (text == 'Attendance') {
+                    attendanceStep();
                 }
             });
 

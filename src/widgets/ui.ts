@@ -135,6 +135,23 @@ export function FormStringInputWidget(type: string): FormValueWidget<string> {
     };
 }
 
+export function FormJsonInputWidget(defaultValue: any): FormValueWidget<any> {
+    const dom = $(`<input class="form-control" type="text">`);
+    dom.val(JSON.stringify(defaultValue));
+    return {
+        dom,
+        getValue(): any {
+            return JSON.parse(dom.val() as string);
+        },
+        setValue(newVal: any): JQuery {
+            return dom.val(JSON.stringify(newVal));
+        },
+        onChange(doThis: (newVal: any) => void): void {
+            dom.val(() => doThis.call(null, JSON.parse(dom.val() as string)));
+        }
+    };
+}
+
 export function FormNumberInputWidget(type: string): FormValueWidget<number> {
     let dom: JQuery = null;
     if (type === 'number') {
@@ -213,11 +230,17 @@ export function StringField(type: string) {
 export function NumberField(type: string) {
     return () => FormNumberInputWidget(type);
 }
+export function IdField() {
+    return () => FormNumberInputWidget('number');
+}
 export function SelectField(options: string[], optionTitles: string[]) {
     return () => FormSelectWidget(options, optionTitles);
 }
 export function NumberArrayField(type: string) {
     return () => FormNumberArrayInputWidget(type);
+}
+export function JsonField(defaultValue: any) {
+    return () => FormJsonInputWidget(defaultValue);
 }
 
 export type FormFieldType = () => FormValueWidget<any>;

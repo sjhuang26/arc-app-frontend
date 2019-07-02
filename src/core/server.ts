@@ -17,29 +17,49 @@ function failAfterFiveSeconds<T>(p: Promise<T>): Promise<T> {
     return new Promise((res, rej) => {
         setTimeout(
             () =>
-                rej({
+                rej(JSON.stringify({
                     error: true,
-                    message: 'Server is not responding'
-                }),
+                    message: 'Server is not responding',
+                    val: null
+                })),
             5000
         );
         p.then(res);
     });
 }
 
-export function convertServerResponseToAskFinished<T>(
-    response: ServerResponse<T>
+export function convertServerStringToAskFinished<T>(
+    str: any
 ): AskFinished<T> {
-    if (response.error) {
+    try {
+        if (typeof str !== 'string') {
+            throw new Error('server response not in correct type');
+        } else {
+            try {
+                const response: ServerResponse<T> = JSON.parse(str);
+                if (typeof response !== 'object' || typeof response.error !== 'boolean') {
+                    throw new Error('server response not in correct type');
+                } else if (response.error) {
+                    const v: AskError = {
+                        status: AskStatus.ERROR,
+                        message: response.message
+                    };
+                    return v;
+                } else {
+                    const v: AskLoaded<T> = {
+                        status: AskStatus.LOADED,
+                        val: response.val
+                    };
+                    return v;
+                }
+            } catch (err) {
+                throw new Error('parsing issue >> ' + stringifyError(err));
+            }
+        }
+    } catch (err) {
         const v: AskError = {
             status: AskStatus.ERROR,
-            message: response.message
-        };
-        return v;
-    } else {
-        const v: AskLoaded<T> = {
-            status: AskStatus.LOADED,
-            val: response.val
+            message: 'during convert >> ' + stringifyError(err)
         };
         return v;
     }
@@ -52,10 +72,28 @@ export function getResultOrFail<T>(askFinished: AskFinished<T>): T {
     }
 }
 export async function askServer(args: any[]): Promise<AskFinished<any>> {
-    console.log('[server] args', args);
-    const result = await failAfterFiveSeconds(realServer(args));
-    console.log('[server] result', result);
-    return convertServerResponseToAskFinished(result);
+    let result: string = JSON.stringify({
+        error: true,
+        val: null,
+        message: 'Mysterious error'
+    });
+    try {
+        if (window['APP_DEBUG_MOCK'] !== 1) {
+            console.log('[server]    args', args);
+            result = await failAfterFiveSeconds(realServer(args));
+            console.log('[server]  result', args, '=>', result);
+        } else {
+            console.log('[MOCK server]   args', args);
+            result = await failAfterFiveSeconds(mockServer(args));
+            console.log('[MOCK server] result', args, '=>', result);
+        }
+    } catch (err) {
+        result = JSON.stringify({
+            status: AskStatus.ERROR,
+            message: 'askserver error >> ' + stringifyError(err)
+        });
+    }
+    return convertServerStringToAskFinished(result);
 }
 
 /*
@@ -149,7 +187,6 @@ class MockResourceServerEndpoint {
     }
 
     processClientAsk(args: any[]): ServerResponse<any> {
-        console.log('[mock server] endpoint', this.resource().name, args);
         if (args[0] === 'retrieveAll') {
             return this.success(this.contents);
         }
@@ -193,91 +230,74 @@ class MockResourceServerEndpoint {
 
 export const mockResourceServerEndpoints = {
     tutors: new MockResourceServerEndpoint(() => tutors, {
-        '1': {
-            id: 1,
-            date: 1561334668346,
-            firstName: 'John',
-            lastName: 'Doe',
-            friendlyName: 'Jo',
-            friendlyFullName: 'Jo-Do',
-            grade: 12,
-            mods: [1, 2],
-            modsPref: [1],
-            subjectList: 'Geometry, Spanish'
-        },
-        '2': {
-            id: 2,
-            date: 1561335668346,
-            firstName: 'Mary',
-            lastName: 'Watson',
-            friendlyName: 'Ma',
-            friendlyFullName: 'Ma-W',
-            grade: 9,
-            mods: [3, 4],
-            modsPref: [4],
-            subjectList: 'English, French'
-        }
     }),
     learners: new MockResourceServerEndpoint(() => learners, {
-        '1': {
-            id: 1,
-            date: 1561334668346,
-            firstName: 'Alex',
-            lastName: 'Doe',
-            friendlyName: 'Al',
-            friendlyFullName: 'Al-D',
-            grade: 12
-        }
     }),
     bookings: new MockResourceServerEndpoint(() => bookings, {}),
     matchings: new MockResourceServerEndpoint(() => matchings, {}),
     requests: new MockResourceServerEndpoint(() => requests, {}),
     requestSubmissions: new MockResourceServerEndpoint(
-        () => requestSubmissions,
-        {
-            '1': {
-                firstName: 'a',
-                lastName: 'b',
-                friendlyName: 'c',
-                friendlyFullName: 'd',
-                grade: 1,
-                mods: [1, 3, 4],
-                subject: 'asdf',
-                id: 1,
-                date: 1561730705297
-            }
-        }
+        () => requestSubmissions, {}
     )
 };
 
-async function realServer(args: any[]): Promise<ServerResponse<any>> {
+
+
+async function realServer(args: any[]): Promise<string> {
+    function getGoogleAppsScriptEndpoint() {
+        if (window['google'] === undefined || window['google'].script === undefined) {
+            // This will be displayed to the user
+            throw 'You should turn on testing mode. Click OTHER >> TESTING MODE.';
+        }
+        return window['google'].script.run;
+    }
+    let result: any = 'Mysterious error';
     try {
-        const val: string = await new Promise((res, rej) => {
-            window['google'].script.run.withFailureHandler(rej).withSuccessHandler(res).onClientAsk(args)
+        result = await new Promise((res, rej) => {
+            getGoogleAppsScriptEndpoint().withFailureHandler(rej).withSuccessHandler(res).onClientAsk(args)
         });
         // NOTE: an "error: true" response is still received by the client through withSuccessHandler().
-        return JSON.parse(val);
     } catch (err) {
-        return {
+        result = JSON.stringify({
             error: true,
             val: null,
             message: stringifyError(err)
-        };
+        });
     }
+    if (typeof result !== 'string') {
+        result = JSON.stringify({
+            error: true,
+            val: null,
+            message: stringifyError('not a string: ' + String(result))
+        });
+    }
+    return result;
 }
-async function mockServer(args: any[]): Promise<ServerResponse<any>> {
+
+async function mockServer(args: any[]): Promise<any> {
+    let result: any = 'Mysterious error';
+
     // only for resources so far
     try {
         const mockArgs = JSON.parse(JSON.stringify(args));
 
-        return await mockResourceServerEndpoints[mockArgs[0]].replyToClientAsk(
+        result = JSON.stringify(await mockResourceServerEndpoints[mockArgs[0]].replyToClientAsk(
             mockArgs.slice(1)
-        );
+        ));
     } catch (err) {
-        return {
+        result = JSON.stringify({
             error: true,
             val: null,
             message: stringifyError(err)
-        };
+        });
     }
+
+    if (typeof result !== 'string') {
+        result = JSON.stringify({
+            error: true,
+            val: null,
+            message: stringifyError('not a string: ' + String(result))
+        });
+    }
+    return result;
 }
