@@ -250,28 +250,16 @@ export class ResourceObservable extends ObservableState<
     }
 
     async updateRecord(record: Record): Promise<AskFinished<void>> {
-        if (this.val.status !== AskStatus.LOADED) {
-            return this.val;
-        }
-
-        const ask = await this.endpoint.update(record);
-        if (ask.status == AskStatus.LOADED) {
-            // update the client to match the server (sync)
-            this.val.val[String(record.id)] = record;
-            this.change.trigger();
-        }
-
-        return ask;
+        if (this.val.status === AskStatus.ERROR) return this.val;
+        this.val.val[String(record.id)] = record;
+        this.change.trigger();
+        return await this.endpoint.update(record);
     }
 
     async createRecord(record: Record): Promise<AskFinished<Record>> {
+        if (this.val.status === AskStatus.ERROR) return this.val;
         const ask = await this.endpoint.create(record);
-        if (this.val.status !== AskStatus.LOADED) {
-            return this.val;
-        }
-
-        if (ask.status == AskStatus.LOADED) {
-            // update the client to match the server (sync)
+        if (ask.status !== AskStatus.ERROR) {
             this.val.val[String(ask.val.id)] = ask.val;
             this.change.trigger();
         }
@@ -279,16 +267,10 @@ export class ResourceObservable extends ObservableState<
     }
 
     async deleteRecord(id: number): Promise<AskFinished<void>> {
-        const ask = await this.endpoint.delete(id);
-        if (
-            ask.status == AskStatus.LOADED &&
-            this.val.status == AskStatus.LOADED
-        ) {
-            // update the client to match the server (sync)
-            delete this.val.val[String(id)];
-            this.change.trigger();
-        }
-        return ask;
+        if (this.val.status === AskStatus.ERROR) return this.val;
+        delete this.val.val[String(id)];
+        this.change.trigger();
+        return await this.endpoint.delete(id);
     }
 
     onServerNotificationUpdate(record: Record) {
