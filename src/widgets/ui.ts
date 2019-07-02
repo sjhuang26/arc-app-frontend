@@ -337,7 +337,7 @@ export function SearchItemWidget(onSubmit: () => void): Widget {
 }
 
 export function createMarkerLink(text: string, onClick: () => void): JQuery {
-    return $('<a style="cursor: pointer"></a>')
+    return $('<a style="cursor: pointer; text-decoration: underline"></a>')
         .text(text)
         .click(onClick);
 }

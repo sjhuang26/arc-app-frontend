@@ -294,13 +294,14 @@ async function handleRequestsAndBookingsStep() {
         for (const x of Object.values(bookingRecords)) {
             const y = requestsIndex[String(x.request)];
             if (y.currentStatus == 'Matched') continue;
-            if (x.status == 'unsent') {
-                y.currentStatus = 'unsent';
-            }
-            if (y.currentStatus == 'Unsent') continue;
             if (x.status.startsWith('waiting')) {
                 y.currentStatus = 'Waiting';
             }
+            if (y.currentStatus == 'Waiting') continue;
+            if (x.status == 'unsent') {
+                y.currentStatus = 'Unsent';
+            }
+
         }
 
         table.setAllValues(

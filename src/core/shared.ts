@@ -430,12 +430,12 @@ export class Resource {
             recordCollection = await this.state.getRecordCollectionOrFail();
 
             const table = TableWidget(
-                this.info.tableFieldTitles.concat('View'),
+                this.info.tableFieldTitles.concat('View & edit'),
                 (record: Record) =>
                     this.info
                         .makeTableRowContent(record)
                         .concat(
-                            ButtonWidget('View', () => {
+                            ButtonWidget('View & edit', () => {
                                 closeThisWindow();
                                 this.makeTiledEditWindow(record.id)
                             }).dom
@@ -693,6 +693,7 @@ const fieldNameMap: FieldNameMap = {
     attendance: ['Attendance data', 'Do not edit this by hand.'],
     status: 'Status',
     mods: ['Mods', 'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'],
+    dropInMods: ['Drop-in mods', 'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'],
     mod: ['Mod', 'A number from 1-20, corresponding to 1A-10B'],
     modsPref: ['Preferred mods', 'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'],
     subjectList: 'Subjects',
@@ -712,7 +713,8 @@ const tutorsInfo: UnprocessedResourceInfo = {
         ['mods', NumberArrayField('number')],
         ['modsPref', NumberArrayField('number')],
         ['subjectList', StringField('text')],
-        ['attendance', JsonField({})]
+        ['attendance', JsonField({})],
+        ['dropInMods', NumberArrayField('number')]
     ],
     fieldNameMap,
     tableFieldTitles: ['Name', 'Grade', 'Mods', 'Subjects'],
