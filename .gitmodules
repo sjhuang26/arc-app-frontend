@@ -1,0 +1,3 @@
+[submodule "arc-app-frontend-server"]
+	path = arc-app-frontend-server
+	url = https://github.com/sjhuang26/arc-app-frontend-server
