@@ -32,11 +32,11 @@ cd arc-app-frontend-server || exit 1
 { printf '\n\n\n'; echo '/* Automatically built on '"$(date +"%Y-%m-%d %T")"' */'; printf '\n'; } >> dist/index.js
 
 # deploy to netlify
-netlify deploy -d dist --prod --message 'automatic' || exit 1
+netlify deploy -d . --prod --message 'automatic' || exit 1
 
 cd ..
 
 # all done!
 echo "ALL DONE!"
-echo "JS LINK = https://arc-app-frontend-server.netlify.com/index.js"
-echo "CSS LINK = https://arc-app-frontend-server.netlify.com/index.css"
+echo "JS LINK = https://arc-app-frontend-server.netlify.com/dist/index.js"
+echo "CSS LINK = https://arc-app-frontend-server.netlify.com/dist/index.css"

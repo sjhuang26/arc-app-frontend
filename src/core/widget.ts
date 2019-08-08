@@ -119,6 +119,10 @@ async function simpleStepWindow(
     }
 }
 
+function showTestingModeWarning() {
+    showModal('Testing mode loaded', 'The app has been disconnected from the actual database/forms and replaced with a blank test database with no data. Start by creating a tutor, learner, and request submission.', bb => [bb('OK', 'primary')]);
+}
+
 /*
 
 STEPS
@@ -842,7 +846,7 @@ export function rootWidget(): Widget {
                     for (const window of state.tiledWindows.val) {
                         window.onLoad.trigger();
                     }
-                    showModal('Testing mode loaded', 'The app has been disconnected from the actual database/forms and replaced with a blank test database with no data. Start by creating a tutor, learner, and request submission.', bb => [bb('OK', 'primary')]);
+                    showTestingModeWarning();
                 }
                 if (text == 'Check request submissions') {
                     checkRequestSubmissionsStep();
@@ -873,5 +877,6 @@ export function rootWidget(): Widget {
             TilingWindowManagerWidget().dom
         )
     );
+    if (window['APP_DEBUG_MOCK'] === 1) showTestingModeWarning();
     return { dom };
 }
