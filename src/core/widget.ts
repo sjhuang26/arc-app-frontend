@@ -125,7 +125,9 @@ function showTestingModeWarning() {
 
 /*
 
-STEPS
+LOTS OF FUNCTIONS!!!!!
+
+IF YOU WANT ANY HOPE OF UNDERSTANDING THIS CODE, READ THE BOTTOM FIRST.
 
 */
 
@@ -802,6 +804,8 @@ async function attendanceDetailsStep({ isLearner, student }: { isLearner: boolea
 /*
 
 ROOT WIDGET
+
+(MAIN ENTRYPOINT)
 
 */
 

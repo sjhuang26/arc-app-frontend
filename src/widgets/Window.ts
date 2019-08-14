@@ -10,6 +10,8 @@ import {
 } from '../core/shared';
 import { ButtonWidget } from './ui';
 
+// Generates keys which are used for IDs.
+
 class KeyMaker {
     private nextKey: number = 0;
     makeKey(): number {

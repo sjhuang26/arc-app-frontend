@@ -1,5 +1,15 @@
 import { Widget, state, DomWidget } from '../core/shared';
 
+/*
+
+THE POINT OF THIS FILE
+
+IS TO CONTROL WHICH WINDOWS ARE VISIBLE
+
+AND MAINTAIN THE ARRAY OF WINDOWS USED
+
+*/
+
 export function TilingWindowManagerWidget(): Widget {
     const tiledWindows = state.tiledWindows;
     const dom = $('<div></div>');

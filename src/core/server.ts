@@ -97,7 +97,7 @@ export async function askServer(args: any[]): Promise<AskFinished<any>> {
 }
 
 /*
-KEY CONCEPT: how data is kept in sync
+KEY CONCEPT: how data is kept in sync (BUT THIS IS 100% TODO)
 Suppose multiple people are using the app at once. When someone sends a change to the server, onClientNotification methods for ALL OTHER clients are called, which basically tell the other clients to "make XYZ change to your local copy of the data".
 */
 export async function onClientNotification(args: any[]): Promise<void> {
@@ -133,6 +133,8 @@ export type ServerResponse<T> = {
     message: string;
 };
 
+// An ASK is a request sent to the server. Either the ASK is loading, or it is loaded successfully, or there is an error.
+
 export enum AskStatus {
     LOADING = 'LOADING',
     LOADED = 'LOADED',
@@ -153,6 +155,8 @@ export type AskLoaded<T> = {
     status: AskStatus.LOADED;
     val: T;
 };
+
+// The point of the mock server is for demos, where we don't want to link to the real spreadsheet with the real data.
 
 class MockResourceServerEndpoint {
     resource: () => Resource;
@@ -227,6 +231,8 @@ class MockResourceServerEndpoint {
         });
     }
 }
+
+// You can edit this to add fake demo data, if you want.
 
 export const mockResourceServerEndpoints = {
     tutors: new MockResourceServerEndpoint(() => tutors, {

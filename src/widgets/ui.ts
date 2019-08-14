@@ -1,8 +1,12 @@
-/*
-TODO: badge, dropdown, and search
-*/
 import { container, Widget, DomWidget, ObservableState } from '../core/shared';
 import { AskStatus } from '../core/server';
+
+/*
+
+THIS IS LITERALLY JUST A BIG UTILITIES FILE FOR WIDGETS.
+
+*/
+
 
 /*export function LoaderWidget() {
     const spinner = container('<div></div>')(

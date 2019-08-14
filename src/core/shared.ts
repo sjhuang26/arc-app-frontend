@@ -682,6 +682,7 @@ export function makeBasicStudentConfig(): [string, FormFieldType][] {
     ];
 }
 
+// This maps field names to the words that show up in the UI.
 const fieldNameMap: FieldNameMap = {
     firstName: 'First name',
     lastName: 'Last name',
@@ -707,6 +708,13 @@ const fieldNameMap: FieldNameMap = {
     id: ['ID', `Do not modify unless you really know what you're doing!`],
     date: ['Date', 'Date of creation -- do not change']
 };
+
+/*
+
+DECLARE INFO FOR EACH RESOURCE
+
+*/
+
 const tutorsInfo: UnprocessedResourceInfo = {
     fields: [
         ...makeBasicStudentConfig(),
@@ -860,6 +868,12 @@ const requestSubmissionsInfo: UnprocessedResourceInfo = {
     makeLabel: record => record.friendlyFullName
 };
 
+/*
+
+LET'S PULL IT ALL TOGETHER
+
+*/
+
 export const tutors = new Resource('tutors', processResourceInfo(tutorsInfo));
 export const learners = new Resource(
     'learners',
@@ -890,6 +904,12 @@ export async function initializeResources(): Promise<void> {
     await requests.state.initialize();
     await requestSubmissions.state.initialize();
 }
+
+/*
+
+VERY USEFUL FOR DEBUG
+
+*/
 
 window['appDebug'] = () => ({
     tutors,
