@@ -22,7 +22,6 @@ import {
     MessageTemplateWidget
 } from '../widgets/ui';
 import { TableWidget } from '../widgets/Table';
-import { ActionBarWidget } from '../widgets/ActionBar';
 import { AskStatus, getResultOrFail } from './server';
 
 /*
@@ -31,30 +30,17 @@ BASIC UTILITIES
 
 */
 
-async function isOperationConfirmedByUser(args: {
-    thisOpDoes: string[];
-    makeSureThat: string[];
-}): Promise<boolean> {
+async function isOperationConfirmedByUser(args: {}): Promise<boolean> {
     return new Promise(async res => {
-        const body = container('<div></div>')(
-            $('<p><strong>This operation will do the following:</strong></p>'),
-            container('<ul></ul>')(
-                args.thisOpDoes.map(x => container('<li></li>')(x))
-            ),
-            $('<p><strong>Make sure that:</strong></p>'),
-            container('<ul></ul>')(
-                args.makeSureThat.map(x => container('<li></li>')(x))
-            )
-        );
-        await showModal('Are you sure?', body, bb => [
-            bb('Cancel', 'outline-secondary'),
-            bb('Go ahead', 'primary', () => res(true))
+        await showModal('Are you sure?', '', bb => [
+            bb('No', 'outline-secondary'),
+            bb('Yes', 'primary', () => res(true))
         ]);
         res(false);
     });
 }
 
-const pillsString = `
+const navigationBarString = `
 <ul class="nav nav-pills">
     <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle" data-toggle="dropdown">View, edit, and add information</a>
@@ -70,9 +56,9 @@ const pillsString = `
     <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle" data-toggle="dropdown">Scheduling workflow</a>
         <div class="dropdown-menu dropdown-menu-right">
-            <a class="dropdown-item">Check request submissions</a>
-            <a class="dropdown-item">Handle requests and bookings</a>
-            <a class="dropdown-item">Finalize matchings</a>
+            <a class="dropdown-item">Handle requests</a>
+            <a class="dropdown-item">Edit schedule</a>
+            <a class="dropdown-item">View schedule</a>
         </div>
     </li>
     <li class="nav-item">
@@ -130,104 +116,69 @@ IF YOU WANT ANY HOPE OF UNDERSTANDING THIS CODE, READ THE BOTTOM FIRST.
 
 */
 
-async function checkRequestSubmissionsStep() {
-    await simpleStepWindow('New request submissions', closeWindow => {
-        const recordCollection = requestSubmissions.state.getRecordCollectionOrFail();
-        const table = TableWidget(
-            ['Name', 'Convert into request'],
-            (record: Record) => {
-                async function attemptConversion() {
-                    // CREATE LEARNER
-                    // try to dig up a learner with matching student ID, which would mean
-                    // that the learner already exists in the database
-                    const matches: Record[] = Object.values(
-                        learners.state.getRecordCollectionOrFail()
-                    ).filter(x => x.studentId === record.studentId);
-                    let learnerRecord: Record;
-                    if (matches.length > 1) {
-                        // duplicate learner student IDs??
-                        // this should be validated in the database
-                        throw new Error(
-                            `duplicate student id: "${record.studentId}"`
-                        );
-                    } else if (matches.length == 0) {
-                        // create new learner
-                        learnerRecord = getResultOrFail(
-                            await learners.state.createRecord({
-                                firstName: record.firstName,
-                                lastName: record.lastName,
-                                friendlyName: record.friendlyName,
-                                friendlyFullName: record.friendlyFullName,
-                                grade: record.grade,
-                                id: -1,
-                                date: -1,
-                                studentId: record.studentId,
-                                email: record.email,
-                                phone: record.phone,
-                                contactPref: record.contactPref,
-                                attendance: {}
-                            })
-                        );
-                    } else {
-                        // learner already exists
-                        learnerRecord = matches[0];
-                    }
+async function attemptToConvertAllRequestSubmissions() {
+    async function attemptConversion(record: Record) {
+        // CREATE LEARNER
+        // try to dig up a learner with matching student ID, which would mean
+        // that the learner already exists in the database
+        const matches: Record[] = Object.values(
+            learners.state.getRecordCollectionOrFail()
+        ).filter(x => x.studentId === record.studentId);
+        let learnerRecord: Record;
+        if (matches.length > 1) {
+            // duplicate learner student IDs??
+            // this should be validated in the database
+            throw new Error(`duplicate student id: "${record.studentId}"`);
+        } else if (matches.length == 0) {
+            // create new learner
+            learnerRecord = getResultOrFail(
+                await learners.state.createRecord({
+                    firstName: record.firstName,
+                    lastName: record.lastName,
+                    friendlyName: record.friendlyName,
+                    friendlyFullName: record.friendlyFullName,
+                    grade: record.grade,
+                    id: -1,
+                    date: -1,
+                    studentId: record.studentId,
+                    email: record.email,
+                    phone: record.phone,
+                    contactPref: record.contactPref,
+                    attendance: {}
+                })
+            );
+        } else {
+            // learner already exists
+            learnerRecord = matches[0];
+        }
 
-                    // CREATE REQUEST
-                    getResultOrFail(
-                        await requests.state.createRecord({
-                            learner: learnerRecord.id,
-                            id: -1,
-                            date: -1,
-                            mods: record.mods,
-                            subject: record.subject,
-                            specialRoom: record.specialRoom
-                        })
-                    );
+        // CREATE REQUEST
+        getResultOrFail(
+            await requests.state.createRecord({
+                learner: learnerRecord.id,
+                id: -1,
+                date: -1,
+                mods: record.mods,
+                subject: record.subject,
+                specialRoom: record.specialRoom
+            })
+        );
 
-                    // MARK REQUEST SUBMISSION AS CHECKED
-                    // NOTE: this is only done if the above steps worked
-                    // so if there's an error, the request submission won't be obliterated
-                    record.status = 'checked';
-                    getResultOrFail(
-                        await requestSubmissions.state.updateRecord(record)
-                    );
-                }
-                return [
-                    requestSubmissions.createMarker(
-                        record.id,
-                        x => x.friendlyFullName
-                    ),
-                    ButtonWidget('Convert', async () => {
-                        if (
-                            await isOperationConfirmedByUser({
-                                thisOpDoes: [
-                                    `Creates a learner if he/she doesn't already exist in the app`,
-                                    `Converts the "request submission" into a "request" and deletes the original`
-                                ],
-                                makeSureThat: [
-                                    `Request submission information is accurate and correctly spelled`
-                                ]
-                            })
-                        ) {
-                            try {
-                                closeWindow()();
-                                await attemptConversion();
-                            } catch (err) {
-                                alertError(err);
-                            }
-                        }
-                    }).dom
-                ];
-            }
-        );
-        table.setAllValues(
-            Object.values(recordCollection).filter(
-                x => x.status === 'unchecked'
-            )
-        );
-        return table.dom;
-    });
+        // MARK REQUEST SUBMISSION AS CHECKED
+        // NOTE: this is only done if the above steps worked
+        // so if there's an error, the request submission won't be obliterated
+        record.status = 'checked';
+        getResultOrFail(await requestSubmissions.state.updateRecord(record));
+    }
+
+    // ITERATE THROUGH ALL UNCHECKED SUBMISSIONS
+    const recordCollection = requestSubmissions.state.getRecordCollectionOrFail();
+    const uncheckedSubmissions = Object.values(recordCollection).filter(
+        x => x.status === 'unchecked'
+    );
+    for (const record of uncheckedSubmissions) {
+        await attemptConversion(record);
+    }
 }
 
 type RequestIndexEntry = {
@@ -601,13 +552,9 @@ async function finalizeBookingsStep(
     onVerify: () => void
 ): Promise<boolean> {
     if (
-        await isOperationConfirmedByUser({
-            thisOpDoes: [
-                'Assigns the tutor to the learner, replacing the booking with a matching (this can be undone by deleting the matching and rebooking)',
-                'Deletes all other bookings associated with the learner'
-            ],
-            makeSureThat: ['The tutor and learner really should be matched']
-        })
+        await isOperationConfirmedByUser(
+            'Are you sure you want to match these students?'
+        )
     ) {
         onVerify();
         try {
@@ -648,49 +595,7 @@ async function finalizeBookingsStep(
 }
 
 async function finalizeMatchingsStep() {
-    await simpleStepWindow('Finalize matchings', closeWindow => {
-        const table = TableWidget(
-            ['Matching', 'Status', 'Write', 'Finalize'],
-            (record: Record) => {
-                const formSelectWidget = FormSelectWidget(
-                    ['unwritten', 'unsent', 'unfinalized'],
-                    ['Unwritten', 'Unsent', 'Unfinalized']
-                );
-                formSelectWidget.setValue(record.status);
-                formSelectWidget.onChange(async newVal => {
-                    record.status = newVal;
-                    const response = await matchings.state.updateRecord(record);
-                    if (response.status === AskStatus.ERROR) {
-                        alertError(response.message);
-                    }
-                });
-                return [
-                    learners.createLabel(
-                        record.learner,
-                        x => x.friendlyFullName
-                    ) +
-                        '<>' +
-                        tutors.createLabel(
-                            record.tutor,
-                            x => x.friendlyFullName
-                        ),
-                    formSelectWidget.dom,
-                    ButtonWidget('Send', () => {
-                        showMatchingSender(record.id);
-                    }).dom,
-                    ButtonWidget('Finalize', () => {
-                        finalizeMatching(record.id, closeWindow());
-                    }).dom
-                ];
-            }
-        );
-        const records = Object.values(
-            matchings.state.getRecordCollectionOrFail()
-        );
-        table.setAllValues(records.filter(x => x.status !== 'finalized'));
-
-        return table.dom;
-    });
+    // code removed
 }
 
 async function showMatchingSender(matchingId: number) {
@@ -724,20 +629,7 @@ async function showMatchingSender(matchingId: number) {
 }
 
 async function finalizeMatching(matchingId: number, onVerify: () => void) {
-    if (
-        await isOperationConfirmedByUser({
-            thisOpDoes: [
-                'Marks the matching as finalized, which posts it on the schedule page and attendance tracker'
-            ],
-            makeSureThat: ['Everyone is notified of the matching']
-        })
-    ) {
-        onVerify();
-        // MARK MATCHING AS FINALIZED
-        const r = matchings.state.getRecordOrFail(matchingId);
-        r.status = 'finalized';
-        matchings.state.updateRecord(r);
-    }
+    // code removed
 }
 
 async function attendanceStep() {
@@ -846,12 +738,51 @@ ROOT WIDGET
 */
 
 export function rootWidget(): Widget {
-    function PillsWidget(): Widget {
-        const dom = $(pillsString);
+    let navigationState: string[] = [];
+    function renavigate(...newNavigationState: string[]) {
+        navigationState = newNavigationState;
+        refreshSidebar();
+        refreshContentBar();
+    }
+    function generateSidebar(content?: JQuery): void {
+        sidebarDom.empty();
+        sidebarDom.removeClass('col-3 app-sidebar');
+        if (content) {
+            sidebarDom.addClass('col-3 app-sidebar');
+            sidebarDom.append(content);
+        }
+    }
+    function refreshSidebar(): void {
+        console.log('refreshSidebar', navigationState);
+        if (navigationState[0] === 'requests') {
+            generateSidebar(container('<p>')('Select a request'));
+        }
+        if (navigationState[0] === 'scheduleEdit') {
+            generateSidebar();
+        }
+        if (navigationState[0] === 'scheduleView') {
+            generateSidebar();
+        }
+        if (navigationState[0] === 'attendance') {
+            generateSidebar(container('<p>')('Select a student'));
+        }
+        if (navigationState[0] === 'about') {
+            generateSidebar();
+        }
+    }
+    function refreshContentBar() {
+        console.log('refreshContentBar');
+    }
+    function generateNavigationBar(): HTMLElement {
+        const dom = $(navigationBarString);
         dom.find('a')
             .css('cursor', 'pointer')
             .click(ev => {
+                ev.preventDefault();
                 const text = $(ev.target).text();
+
+                // DATA EDITOR
+                // the data editor isn't considered a navigation state
                 if (text == 'Tutors') tutors.makeTiledViewAllWindow();
                 if (text == 'Learners') learners.makeTiledViewAllWindow();
                 if (text == 'Bookings') bookings.makeTiledViewAllWindow();
@@ -859,21 +790,45 @@ export function rootWidget(): Widget {
                 if (text == 'Request submissions')
                     requestSubmissions.makeTiledViewAllWindow();
                 if (text == 'Requests') requests.makeTiledViewAllWindow();
-                ev.preventDefault();
-                if (text == 'About')
-                    showModal('About', 'Made by Suhao Jeffrey Huang', bb => [
-                        bb('OK', 'primary')
-                    ]);
+
+                // SCHEDULER
+                if (text == 'Handle requests') {
+                    renavigate('requests');
+                    //handleRequestsAndBookingsStep();
+                }
+                if (text == 'Edit schedule') {
+                    renavigate('scheduleEdit');
+                    //finalizeMatchingsStep();
+                }
+                if (text == 'View schedule') {
+                    renavigate('scheduleView');
+                    //finalizeMatchingsStep();
+                }
+
+                // ATTENDANCE
+                if (text == 'Attendance') {
+                    renavigate('attendance');
+                }
+
+                // MISC
+                if (text == 'About') {
+                    renavigate('about');
+                }
                 if (text == 'Force refresh') {
-                    tutors.state.forceRefresh();
-                    learners.state.forceRefresh();
-                    bookings.state.forceRefresh();
-                    matchings.state.forceRefresh();
-                    requests.state.forceRefresh();
-                    requestSubmissions.state.forceRefresh();
-                    for (const window of state.tiledWindows.val) {
-                        window.onLoad.trigger();
-                    }
+                    (async () => {
+                        const { closeModal } = showModal(
+                            'Loading force refresh...',
+                            '',
+                            bb => []
+                        );
+                        await tutors.state.forceRefresh();
+                        await learners.state.forceRefresh();
+                        await bookings.state.forceRefresh();
+                        await matchings.state.forceRefresh();
+                        await requests.state.forceRefresh();
+                        await requestSubmissions.state.forceRefresh();
+                        closeModal();
+                    })();
                 }
                 if (text == 'Testing mode') {
                     window['APP_DEBUG_MOCK'] = 1;
@@ -888,29 +843,18 @@ export function rootWidget(): Widget {
                     }
                     showTestingModeWarning();
                 }
-                if (text == 'Check request submissions') {
-                    checkRequestSubmissionsStep();
-                }
-                if (text == 'Handle requests and bookings') {
-                    handleRequestsAndBookingsStep();
-                }
-                if (text == 'Finalize matchings') {
-                    finalizeMatchingsStep();
-                }
-                if (text == 'Attendance') {
-                    attendanceStep();
-                }
             });
 
-        return { dom };
+        return dom[0];
     }
-
+    const sidebarDom = container('<div></div>')();
+    const mainContentPanelDom = container('<div></div>')();
     const dom = container('<div id="app" class="layout-v"></div>')(
         container('<nav class="navbar layout-item-fit">')(
             $('<strong class="mr-4">ARC</strong>'),
-            PillsWidget().dom
-        )
-        // TODO add AppRefresher
+            generateNavigationBar()
+        ),
+        container('<div class="row">')(sidebarDom, mainContentPanelDom)
     );
     if (window['APP_DEBUG_MOCK'] === 1) showTestingModeWarning();
     return { dom };

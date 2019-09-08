@@ -90,7 +90,7 @@ const modalHtmlString = `<div class="modal" tabindex="-1" role="dialog">
 </div>
 </div>`;
 
-export async function showModal(
+export function showModal(
     title: string,
     content: string | JQuery,
     buildButtons: (buildButton: {
@@ -102,7 +102,7 @@ export async function showModal(
         ): JQuery;
         close: () => void;
     }) => JQuery[]
-): Promise<void> {
+): Promise<void> & { closeModal: () => void } {
     const dom = $(modalHtmlString);
     dom.find('.modal-title').text(title);
     dom.find('.modal-body').append(
@@ -135,9 +135,11 @@ export async function showModal(
         buildButtons(buildButtonsParameterFunction)
     );
     dom.modal();
-    return new Promise(res => {
+    const modifiedPromise: any = new Promise<void>(res => {
         dom.on('hidden.bs.modal', () => res());
     });
+    modifiedPromise.closeModal = closeModal;
+    return modifiedPromise;
 }
 
 export type FormValueWidget<T> = Widget & {

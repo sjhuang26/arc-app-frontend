@@ -14,6 +14,10 @@ body {
     flex: 1;
     min-height: 0;
 }
+
+.app-sidebar {
+    border-right: 5px solid #ddd;
+}
 /*
 
 This is a series of aliases for flexbox layout.
