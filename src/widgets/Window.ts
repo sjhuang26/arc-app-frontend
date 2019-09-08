@@ -27,9 +27,14 @@ const windowKeyMaker = new KeyMaker();
 
 function WindowWidget(content: JQuery, actionBarContent: JQuery): Widget {
     return DomWidget(
-        container('<div class="card m-3"></div>')(
-            container('<div class="card-header"></div>')(actionBarContent),
-            container('<div class="card-body"></div>')(content)
+        container('<div class="card"></div>')(
+            container('<header class="card-header"></header>')(
+                $('<p class="card-header-title">ASDF</p>'),
+                actionBarContent
+            ),
+            container('<div class="card-content"></div>')(
+                container('<div class="content">')(content)
+            )
         )
     );
 }

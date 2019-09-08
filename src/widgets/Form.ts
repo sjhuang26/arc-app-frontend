@@ -11,12 +11,19 @@ export function FormWidget(fields: ResourceFieldInfo[]): FormWidget {
         fields.map(({ title, type, name, info }) => {
             const widget = type();
             widgets[name] = widget;
-            return container('<div class="form-group row"></div>')(
-                container('<label class="col-2 col-form-label"></label>')(
-                    container('<b></b>')(title),
-                    (info && container('<i class="ml-2"></i>')(info))
+            return container('<div class="field is-horizontal"></div>')(
+                container('<div class="field-label"></div>')(
+                    container('<label class="label"></label>')(
+                        title,
+                        info &&
+                            container(
+                                '<i style="margin-left: 1rem; font-weight: normal"></i>'
+                            )(info)
+                    )
                 ),
-                container('<div class="col-10"></div>')(widget.dom)
+                container('<div class="field-body"></div>')(
+                    container('<div class="field"></div>')(widget.dom)
+                )
             );
         })
     );

@@ -57,39 +57,58 @@ async function isOperationConfirmedByUser(args: {
     });
 }
 
-const pillsString = `
-<ul class="nav nav-pills">
-    <li class="nav-item dropdown">
-        <a class="nav-link dropdown-toggle" data-toggle="dropdown">View, edit, and add information</a>
-        <div class="dropdown-menu dropdown-menu-right">
-            <a class="dropdown-item">Tutors</a>
-            <a class="dropdown-item">Learners</a>
-            <a class="dropdown-item">Requests</a>
-            <a class="dropdown-item">Request submissions</a>
-            <a class="dropdown-item">Bookings</a>
-            <a class="dropdown-item">Matchings</a>
+const mainNavigationString = `
+  <div class="navbar-brand">
+    <div class="navbar-item"><strong style="font-size: 2rem">ARC</strong></div>
+    <a role="button" class="navbar-burger burger" aria-label="menu" aria-expanded="false" data-target="appNav">
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+    </a>
+  </div>
+
+  <div id="appNav" class="navbar-menu">
+    <div class="navbar-end">
+      <a class="navbar-item">
+        Attendance
+      </a>
+
+      <div class="navbar-item has-dropdown is-hoverable">
+        <a class="navbar-link">
+            Advanced data editor
+        </a>
+        <div class="navbar-dropdown">
+            <a class="navbar-item">Tutors</a>
+            <a class="navbar-item">Learners</a>
+            <a class="navbar-item">Requests</a>
+            <a class="navbar-item">Request submissions</a>
+            <a class="navbar-item">Bookings</a>
+            <a class="navbar-item">Matchings</a>
         </div>
-    </li>
-    <li class="nav-item dropdown">
-        <a class="nav-link dropdown-toggle" data-toggle="dropdown">Scheduling workflow</a>
-        <div class="dropdown-menu dropdown-menu-right">
-            <a class="dropdown-item">Check request submissions</a>
-            <a class="dropdown-item">Handle requests and bookings</a>
-            <a class="dropdown-item">Finalize matchings</a>
+      </div>
+      <div class="navbar-item has-dropdown is-hoverable">
+        <a class="navbar-link">
+            Scheduling workflow
+        </a>
+        <div class="navbar-dropdown">
+            <a class="navbar-item">Check request submissions</a>
+            <a class="navbar-item">Handle requests and bookings</a>
+            <a class="navbar-item">Finalize matchings</a>
         </div>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link">Attendance</a>
-    </li>
-    <li class="nav-item dropdown">
-        <a class="nav-link dropdown-toggle" data-toggle="dropdown">Other</a>
-        <div class="dropdown-menu dropdown-menu-right">
-            <a class="dropdown-item">About</a>
-            <a class="dropdown-item">Force refresh</a>
-            <a class="dropdown-item">Testing mode</a>
+      </div>
+      <div class="navbar-item has-dropdown is-hoverable">
+        <a class="navbar-link">
+            Other
+        </a>
+        <div class="navbar-dropdown is-right">
+            <a class="navbar-item">About</a>
+            <a class="navbar-item">Force refresh</a>
+            <a class="navbar-item">Testing mode</a>
         </div>
-    </li>
-</ul>`;
+      </div>
+    </div>
+  </div>
+</nav>`;
 
 async function simpleStepWindow(
     defaultWindowLabel: JQuery | string,
@@ -120,7 +139,11 @@ async function simpleStepWindow(
 }
 
 function showTestingModeWarning() {
-    showModal('Testing mode loaded', 'The app has been disconnected from the actual database/forms and replaced with a blank test database with no data. Start by creating a tutor, learner, and request submission.', bb => [bb('OK', 'primary')]);
+    showModal(
+        'Testing mode loaded',
+        'The app has been disconnected from the actual database/forms and replaced with a blank test database with no data. Start by creating a tutor, learner, and request submission.',
+        bb => [bb('OK', 'primary')]
+    );
 }
 
 /*
@@ -143,10 +166,7 @@ async function checkRequestSubmissionsStep() {
                     // that the learner already exists in the database
                     const matches: Record[] = Object.values(
                         learners.state.getRecordCollectionOrFail()
-                    ).filter(
-                        x =>
-                            x.studentId === record.studentId
-                    );
+                    ).filter(x => x.studentId === record.studentId);
                     let learnerRecord: Record;
                     if (matches.length > 1) {
                         // duplicate learner student IDs??
@@ -225,7 +245,11 @@ async function checkRequestSubmissionsStep() {
                 ];
             }
         );
-        table.setAllValues(Object.values(recordCollection).filter(x => x.status === 'unchecked'));
+        table.setAllValues(
+            Object.values(recordCollection).filter(
+                x => x.status === 'unchecked'
+            )
+        );
         return table.dom;
     });
 }
@@ -307,7 +331,6 @@ async function handleRequestsAndBookingsStep() {
             if (x.status == 'unsent') {
                 y.currentStatus = 'Unsent';
             }
-
         }
 
         table.setAllValues(
@@ -333,10 +356,10 @@ async function showRequestBookerStep(requestId: number) {
     };
     await simpleStepWindow(
         'Booker for ' +
-        learners.createLabel(
-            requests.state.getRecordOrFail(requestId).learner,
-            x => x.friendlyFullName
-        ),
+            learners.createLabel(
+                requests.state.getRecordOrFail(requestId).learner,
+                x => x.friendlyFullName
+            ),
         closeWindow => {
             const matchingRecords = matchings.state.getRecordCollectionOrFail();
             const bookingRecords = bookings.state.getRecordCollectionOrFail();
@@ -377,18 +400,20 @@ async function showRequestBookerStep(requestId: number) {
                             booking.tutor,
                             x => x.friendlyFullName
                         ) +
-                        ' <> ' +
-                        learners.createLabel(
-                            requests.state.getRecordOrFail(booking.request)
-                                .learner,
-                            x => x.friendlyFullName
-                        ),
+                            ' <> ' +
+                            learners.createLabel(
+                                requests.state.getRecordOrFail(booking.request)
+                                    .learner,
+                                x => x.friendlyFullName
+                            ),
                         formSelectWidget.dom,
                         ButtonWidget('Todo', () =>
                             showBookingMessagerStep(booking.id)
                         ).dom,
                         ButtonWidget('Finalize', () => {
-                            finalizeBookingsStep(booking.id, () => closeWindow()());
+                            finalizeBookingsStep(booking.id, () =>
+                                closeWindow()()
+                            );
                         }).dom
                     ];
                 }
@@ -409,7 +434,7 @@ async function showRequestBookerStep(requestId: number) {
                             buttonsDom.append(
                                 ButtonWidget(
                                     modLabel + ' (already booked)',
-                                    () => { }
+                                    () => {}
                                 ).dom
                             );
                             continue;
@@ -552,7 +577,9 @@ async function showBookingMessagerStep(bookingId: number) {
                 );
                 dom.append(
                     MessageTemplateWidget(
-                        `Hi! Can you tutor a student in ${r.subject} on mod ${stringifyMod(b.mod)}?`
+                        `Hi! Can you tutor a student in ${
+                            r.subject
+                        } on mod ${stringifyMod(b.mod)}?`
                     ).dom
                 );
                 dom.append(
@@ -569,7 +596,9 @@ async function showBookingMessagerStep(bookingId: number) {
                 );
                 dom.append(
                     MessageTemplateWidget(
-                        `Hi! We have a tutor for you on mod ${stringifyMod(b.mod)}. Can you come?`
+                        `Hi! We have a tutor for you on mod ${stringifyMod(
+                            b.mod
+                        )}. Can you come?`
                     ).dom
                 );
                 dom.append(
@@ -664,11 +693,11 @@ async function finalizeMatchingsStep() {
                         record.learner,
                         x => x.friendlyFullName
                     ) +
-                    '<>' +
-                    tutors.createLabel(
-                        record.tutor,
-                        x => x.friendlyFullName
-                    ),
+                        '<>' +
+                        tutors.createLabel(
+                            record.tutor,
+                            x => x.friendlyFullName
+                        ),
                     formSelectWidget.dom,
                     ButtonWidget('Send', () => {
                         showMatchingSender(record.id);
@@ -703,11 +732,15 @@ async function showMatchingSender(matchingId: number) {
             return container('<div></div>')(
                 'Send this to the learner.',
                 MessageTemplateWidget(
-                    `You will be tutored by ${t.friendlyFullName} during mod ${stringifyMod(m.mod)}.`
+                    `You will be tutored by ${
+                        t.friendlyFullName
+                    } during mod ${stringifyMod(m.mod)}.`
                 ).dom,
                 'Then, send this to the tutor.',
                 MessageTemplateWidget(
-                    `You will be tutoring ${l.friendlyFullName} during mod ${stringifyMod(m.mod)}.`
+                    `You will be tutoring ${
+                        l.friendlyFullName
+                    } during mod ${stringifyMod(m.mod)}.`
                 ).dom
             );
         }
@@ -738,7 +771,13 @@ async function attendanceStep() {
         const table = TableWidget(
             // Both learners and tutors are students.
             ['Student', 'Total minutes', 'Attendance level', 'Details'],
-            ({ isLearner, student }: { isLearner: boolean, student: Record }) => {
+            ({
+                isLearner,
+                student
+            }: {
+                isLearner: boolean;
+                student: Record;
+            }) => {
                 // calculate the attendance level & totals
                 let numPresent = 0;
                 let numAbsent = 0;
@@ -766,26 +805,47 @@ async function attendanceStep() {
                 ];
             }
         );
-        table.setAllValues(t.map(x => ({ isLearner: false, student: x }))
-            .concat(l.map(x => ({ isLearner: true, student: x })))
+        table.setAllValues(
+            t
+                .map(x => ({ isLearner: false, student: x }))
+                .concat(l.map(x => ({ isLearner: true, student: x })))
         );
         return table.dom;
     });
 }
 
-async function attendanceDetailsStep({ isLearner, student }: { isLearner: boolean, student: Record }) {
-    await simpleStepWindow(container('<span>')(
-        'Attendance for ',
-        (isLearner ? learners : tutors).createMarker(student.id, x => x.friendlyFullName)),
+async function attendanceDetailsStep({
+    isLearner,
+    student
+}: {
+    isLearner: boolean;
+    student: Record;
+}) {
+    await simpleStepWindow(
+        container('<span>')(
+            'Attendance for ',
+            (isLearner ? learners : tutors).createMarker(
+                student.id,
+                x => x.friendlyFullName
+            )
+        ),
         _closeWindow => {
             const table = TableWidget(
                 // Both learners and tutors are students.
                 ['Date', 'Mod', 'Present?'],
-                (attendanceEntry: { date: number, mod: number, minutes: number }) => {
+                (attendanceEntry: {
+                    date: number;
+                    mod: number;
+                    minutes: number;
+                }) => {
                     return [
-                        new Date(attendanceEntry.date).toISOString().substring(0, 10),
+                        new Date(attendanceEntry.date)
+                            .toISOString()
+                            .substring(0, 10),
                         String(attendanceEntry.mod),
-                        attendanceEntry.minutes > 0 ? `P (${attendanceEntry.minutes} minutes)` : $('<span style="color:red">ABSENT</span>')
+                        attendanceEntry.minutes > 0
+                            ? `P (${attendanceEntry.minutes} minutes)`
+                            : $('<span style="color:red">ABSENT</span>')
                     ];
                 }
             );
@@ -811,7 +871,7 @@ ROOT WIDGET
 
 export function rootWidget(): Widget {
     function PillsWidget(): Widget {
-        const dom = $(pillsString);
+        const dom = $(mainNavigationString);
         dom.find('a')
             .css('cursor', 'pointer')
             .click(ev => {
@@ -870,8 +930,7 @@ export function rootWidget(): Widget {
     }
 
     const dom = container('<div id="app" class="layout-v"></div>')(
-        container('<nav class="navbar layout-item-fit">')(
-            $('<strong class="mr-4">ARC</strong>'),
+        container('<nav class="navbar layout-item-fit" style="z-index: 999">')(
             PillsWidget().dom
         ),
         container('<nav class="navbar layout-item-fit layout-v"></div>')(

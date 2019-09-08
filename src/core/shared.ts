@@ -35,12 +35,13 @@ ALL BASIC CLASSES AND BASIC UTILS
 */
 
 export async function alertError(err: any): Promise<void> {
-    await showModal('Error!',
+    await showModal(
+        'Error!',
         container('<div>')(
             $('<p><b>There was an error.</b></p>'),
             container('<p>')(stringifyError(err))
         ),
-        bb => [bb('OK', 'primary')]
+        bb => [bb('OK', 'is-primary')]
     );
 }
 
@@ -186,7 +187,7 @@ export class ResourceEndpoint {
 }
 export class ResourceObservable extends ObservableState<
     AskFinished<RecordCollection>
-    > {
+> {
     endpoint: ResourceEndpoint;
 
     constructor(endpoint: ResourceEndpoint) {
@@ -355,14 +356,23 @@ export class Resource {
                     form.dom
                 ),
                 ActionBarWidget([
-                    ['Delete', () => this.makeTiledDeleteWindow(id, () => closeWindow())],
-                    ['Save', async () => {
-                        closeWindow();
-                        const ask = await this.state.updateRecord(form.getAllValues());
-                        if (ask.status === AskStatus.ERROR) {
-                            alertError(ask.message);
+                    [
+                        'Delete',
+                        () =>
+                            this.makeTiledDeleteWindow(id, () => closeWindow())
+                    ],
+                    [
+                        'Save',
+                        async () => {
+                            closeWindow();
+                            const ask = await this.state.updateRecord(
+                                form.getAllValues()
+                            );
+                            if (ask.status === AskStatus.ERROR) {
+                                alertError(ask.message);
+                            }
                         }
-                    }],
+                    ],
                     ['Close', () => closeWindow()]
                 ]).dom,
                 windowLabel
@@ -397,9 +407,11 @@ export class Resource {
                         'Create',
                         async () => {
                             try {
-                                getResultOrFail(await this.state.createRecord(
-                                    form.getAllValues()
-                                ));
+                                getResultOrFail(
+                                    await this.state.createRecord(
+                                        form.getAllValues()
+                                    )
+                                );
                                 closeWindow();
                             } catch (err) {
                                 alertError(err);
@@ -432,14 +444,12 @@ export class Resource {
             const table = TableWidget(
                 this.info.tableFieldTitles.concat('View & edit'),
                 (record: Record) =>
-                    this.info
-                        .makeTableRowContent(record)
-                        .concat(
-                            ButtonWidget('View & edit', () => {
-                                closeThisWindow();
-                                this.makeTiledEditWindow(record.id)
-                            }).dom
-                        )
+                    this.info.makeTableRowContent(record).concat(
+                        ButtonWidget('View & edit', () => {
+                            closeThisWindow();
+                            this.makeTiledEditWindow(record.id);
+                        }).dom
+                    )
             );
 
             onLoad.listen(() => {
@@ -455,10 +465,13 @@ export class Resource {
                     table.dom
                 ),
                 ActionBarWidget([
-                    ['Create', () => {
-                        closeWindow();
-                        this.makeTiledCreateWindow();
-                    }],
+                    [
+                        'Create',
+                        () => {
+                            closeWindow();
+                            this.makeTiledCreateWindow();
+                        }
+                    ],
                     ['Close', () => closeWindow()]
                 ]).dom,
                 windowLabel,
@@ -472,9 +485,7 @@ export class Resource {
             const windowLabel = 'ERROR in: view all ' + this.info.pluralTitle;
             const { closeWindow } = useTiledWindow(
                 ErrorWidget(errorMessage).dom,
-                ActionBarWidget([
-                    ['Close', () => closeWindow()]
-                ]).dom,
+                ActionBarWidget([['Close', () => closeWindow()]]).dom,
                 windowLabel
             );
         }
@@ -500,7 +511,7 @@ export class Resource {
                             .deleteRecord(id)
                             .then(() => closeParentWindow())
                             .then(() => closeWindow())
-                            .catch((err) => alertError(err))
+                            .catch(err => alertError(err))
                 ],
                 ['Cancel', () => closeWindow]
             ]).dom,
@@ -655,8 +666,7 @@ export function processResourceInfo(
     };
 }
 
-export type FieldNameMap =
-    { [name: string]: string | [string, string] };
+export type FieldNameMap = { [name: string]: string | [string, string] };
 
 export type UnprocessedResourceInfo = {
     fields: [string, FormFieldType][]; // name, string/number, type
@@ -678,7 +688,13 @@ export function makeBasicStudentConfig(): [string, FormFieldType][] {
         ['studentId', NumberField('number')],
         ['email', StringField('email')],
         ['phone', StringField('string')],
-        ['contactPref', SelectField(['email', 'phone', 'either'], ['Email', 'Phone', 'Either'])]
+        [
+            'contactPref',
+            SelectField(
+                ['email', 'phone', 'either'],
+                ['Email', 'Phone', 'Either']
+            )
+        ]
     ];
 }
 
@@ -689,22 +705,43 @@ const fieldNameMap: FieldNameMap = {
     friendlyName: 'Friendly name',
     friendlyFullName: 'Friendly full name',
     grade: ['Grade', 'A number from 9-12'],
-    learner: ['Learner', 'This is an ID. You usually will not need to edit this by hand.'],
-    tutor: ['Tutor', 'This is an ID. You usually will not need to edit this by hand.'],
+    learner: [
+        'Learner',
+        'This is an ID. You usually will not need to edit this by hand.'
+    ],
+    tutor: [
+        'Tutor',
+        'This is an ID. You usually will not need to edit this by hand.'
+    ],
     attendance: ['Attendance data', 'Do not edit this by hand.'],
     status: 'Status',
-    mods: ['Mods', 'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'],
-    dropInMods: ['Drop-in mods', 'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'],
+    mods: [
+        'Mods',
+        'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'
+    ],
+    dropInMods: [
+        'Drop-in mods',
+        'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'
+    ],
     mod: ['Mod', 'A number from 1-20, corresponding to 1A-10B'],
-    modsPref: ['Preferred mods', 'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'],
+    modsPref: [
+        'Preferred mods',
+        'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'
+    ],
     subjectList: 'Subjects',
-    request: ['Request', 'This is an ID. You usually will not need to edit this by hand.'],
+    request: [
+        'Request',
+        'This is an ID. You usually will not need to edit this by hand.'
+    ],
     subject: 'Subject(s)',
     studentId: 'Student ID',
     email: 'Email',
     phone: 'Phone',
     contactPref: 'Contact preference',
-    specialRoom: ['Special tutoring room', `Leave blank if the student isn't in special tutoring`],
+    specialRoom: [
+        'Special tutoring room',
+        `Leave blank if the student isn't in special tutoring`
+    ],
     id: ['ID', `Do not modify unless you really know what you're doing!`],
     date: ['Date', 'Date of creation -- do not change']
 };
@@ -813,7 +850,9 @@ const bookingsInfo: UnprocessedResourceInfo = {
     makeLabel: record =>
         tutors.state.getRecordOrFail(record.tutor).friendlyFullName +
         ' <> ' +
-        learners.state.getRecordOrFail(requests.state.getRecordOrFail(record.request).learner).friendlyFullName
+        learners.state.getRecordOrFail(
+            requests.state.getRecordOrFail(record.request).learner
+        ).friendlyFullName
 };
 
 const matchingsInfo: UnprocessedResourceInfo = {
@@ -854,7 +893,10 @@ const requestSubmissionsInfo: UnprocessedResourceInfo = {
         ['mods', NumberArrayField('number')],
         ['subject', StringField('text')],
         ['specialRoom', StringField('text')],
-        ['status', SelectField(['unchecked', 'checked'], ['Unchecked', 'Checked'])]
+        [
+            'status',
+            SelectField(['unchecked', 'checked'], ['Unchecked', 'Checked'])
+        ]
     ],
     fieldNameMap,
     tableFieldTitles: ['Name', 'Mods', 'Subject'],
