@@ -6,7 +6,6 @@ import {
     getResultOrFail
 } from './server';
 import { FormWidget } from '../widgets/Form';
-import { useTiledWindow } from '../widgets/Window';
 
 import {
     StringField,
@@ -35,7 +34,8 @@ ALL BASIC CLASSES AND BASIC UTILS
 */
 
 export async function alertError(err: any): Promise<void> {
-    await showModal('Error!',
+    await showModal(
+        'Error!',
         container('<div>')(
             $('<p><b>There was an error.</b></p>'),
             container('<p>')(stringifyError(err))
@@ -186,7 +186,7 @@ export class ResourceEndpoint {
 }
 export class ResourceObservable extends ObservableState<
     AskFinished<RecordCollection>
-    > {
+> {
     endpoint: ResourceEndpoint;
 
     constructor(endpoint: ResourceEndpoint) {
@@ -349,32 +349,36 @@ export class Resource {
             const form = this.makeFormWidget();
             form.setAllValues(record);
 
-            const { closeWindow } = useTiledWindow(
+            showModal(
+                windowLabel,
                 container('<div></div>')(
                     container('<h1></h1>')(windowLabel),
                     form.dom
                 ),
-                ActionBarWidget([
-                    ['Delete', () => this.makeTiledDeleteWindow(id, () => closeWindow())],
-                    ['Save', async () => {
-                        closeWindow();
-                        const ask = await this.state.updateRecord(form.getAllValues());
+                bb => [
+                    bb(
+                        'Delete',
+                        'danger',
+                        () => this.makeTiledDeleteWindow(id, () => bb.close()),
+                        false
+                    ),
+                    bb('Save', 'primary', async () => {
+                        const ask = await this.state.updateRecord(
+                            form.getAllValues()
+                        );
                         if (ask.status === AskStatus.ERROR) {
                             alertError(ask.message);
                         }
-                    }],
-                    ['Close', () => closeWindow()]
-                ]).dom,
-                windowLabel
+                    }),
+                    bb('Close', 'secondary')
+                ]
             );
         } catch (err) {
             const windowLabel = 'ERROR in: ' + this.info.title + ' #' + id;
             errorMessage = stringifyError(err);
-            const { closeWindow } = useTiledWindow(
-                ErrorWidget(errorMessage).dom,
-                ActionBarWidget([['Close', () => closeWindow()]]).dom,
-                windowLabel
-            );
+            showModal(windowLabel, ErrorWidget(errorMessage).dom, bb => [
+                bb('Close', 'primary')
+            ]);
         }
     }
 
@@ -387,37 +391,33 @@ export class Resource {
             const form = this.makeFormWidget();
             form.setAllValues({ id: -1, date: Date.now() });
 
-            const { closeWindow } = useTiledWindow(
+            showModal(
+                windowLabel,
                 container('<div></div>')(
                     container('<h1></h1>')(windowLabel),
                     form.dom
                 ),
-                ActionBarWidget([
-                    [
-                        'Create',
-                        async () => {
-                            try {
-                                getResultOrFail(await this.state.createRecord(
+                bb => [
+                    bb('Create', 'primary', async () => {
+                        try {
+                            getResultOrFail(
+                                await this.state.createRecord(
                                     form.getAllValues()
-                                ));
-                                closeWindow();
-                            } catch (err) {
-                                alertError(err);
-                            }
+                                )
+                            );
+                        } catch (err) {
+                            alertError(err);
                         }
-                    ],
-                    ['Cancel', () => closeWindow()]
-                ]).dom,
-                windowLabel
+                    }),
+                    bb('Cancel', 'secondary')
+                ]
             );
         } catch (err) {
             const windowLabel = 'ERROR in: create new ' + this.info.title;
             errorMessage = stringifyError(err);
-            const { closeWindow } = useTiledWindow(
-                ErrorWidget(errorMessage).dom,
-                ActionBarWidget([['Close', () => closeWindow()]]).dom,
-                windowLabel
-            );
+            showModal(windowLabel, ErrorWidget(errorMessage).dom, bb => [
+                bb('Close', 'primary')
+            ]);
         }
     }
 
@@ -425,88 +425,69 @@ export class Resource {
         let recordCollection: RecordCollection = null;
         let errorMessage: string = '';
         try {
-            const onLoad = new Event();
-
             recordCollection = await this.state.getRecordCollectionOrFail();
 
             const table = TableWidget(
                 this.info.tableFieldTitles.concat('View & edit'),
                 (record: Record) =>
-                    this.info
-                        .makeTableRowContent(record)
-                        .concat(
-                            ButtonWidget('View & edit', () => {
-                                closeThisWindow();
-                                this.makeTiledEditWindow(record.id)
-                            }).dom
-                        )
+                    this.info.makeTableRowContent(record).concat(
+                        ButtonWidget('View & edit', () => {
+                            this.makeTiledEditWindow(record.id);
+                        }).dom
+                    )
             );
-
-            onLoad.listen(() => {
-                recordCollection = this.state.getLoadedOrFail();
-                table.setAllValues(recordCollection);
-            });
+            table.setAllValues(recordCollection);
 
             const windowLabel = 'View all ' + this.info.pluralTitle;
 
-            const { closeWindow } = useTiledWindow(
+            showModal(
+                windowLabel,
                 container('<div></div>')(
                     container('<h1></h1>')(windowLabel),
                     table.dom
                 ),
-                ActionBarWidget([
-                    ['Create', () => {
-                        closeWindow();
-                        this.makeTiledCreateWindow();
-                    }],
-                    ['Close', () => closeWindow()]
-                ]).dom,
-                windowLabel,
-                onLoad
+                bb => [
+                    bb(
+                        'Create',
+                        'secondary',
+                        () => this.makeTiledCreateWindow(),
+                        true
+                    ),
+                    bb('Close', 'primary')
+                ]
             );
-            function closeThisWindow() {
-                closeWindow();
-            }
         } catch (err) {
             errorMessage = stringifyError(err);
             const windowLabel = 'ERROR in: view all ' + this.info.pluralTitle;
-            const { closeWindow } = useTiledWindow(
-                ErrorWidget(errorMessage).dom,
-                ActionBarWidget([
-                    ['Close', () => closeWindow()]
-                ]).dom,
-                windowLabel
-            );
+            showModal(windowLabel, ErrorWidget(errorMessage).dom, bb => [
+                bb('Close', 'primary')
+            ]);
         }
     }
 
-    makeTiledDeleteWindow(id: number, closeParentWindow: () => void) {
+    makeTiledDeleteWindow(id: number, closeParentWindow: () => void): void {
         const windowLabel =
             'Delete this ' +
             this.info.title +
             '? (' +
             this.createLabel(id, record => record.friendlyFullName) +
             ')';
-        const { windowWidget, closeWindow } = useTiledWindow(
+        showModal(
+            windowLabel,
             container('<div></div>')(
                 container('<h1></h1>')('Delete?'),
                 container('<p></p>')('Are you sure you want to delete this?')
             ),
-            ActionBarWidget([
-                [
-                    'Delete',
-                    () =>
-                        this.state
-                            .deleteRecord(id)
-                            .then(() => closeParentWindow())
-                            .then(() => closeWindow())
-                            .catch((err) => alertError(err))
-                ],
-                ['Cancel', () => closeWindow]
-            ]).dom,
-            windowLabel
+            bb => [
+                bb('Delete', 'danger', () =>
+                    this.state
+                        .deleteRecord(id)
+                        .then(() => closeParentWindow())
+                        .catch(err => alertError(err))
+                ),
+                bb('Cancel', 'primary')
+            ]
         );
-        return windowWidget;
     }
 }
 
@@ -655,8 +636,7 @@ export function processResourceInfo(
     };
 }
 
-export type FieldNameMap =
-    { [name: string]: string | [string, string] };
+export type FieldNameMap = { [name: string]: string | [string, string] };
 
 export type UnprocessedResourceInfo = {
     fields: [string, FormFieldType][]; // name, string/number, type
@@ -678,7 +658,13 @@ export function makeBasicStudentConfig(): [string, FormFieldType][] {
         ['studentId', NumberField('number')],
         ['email', StringField('email')],
         ['phone', StringField('string')],
-        ['contactPref', SelectField(['email', 'phone', 'either'], ['Email', 'Phone', 'Either'])]
+        [
+            'contactPref',
+            SelectField(
+                ['email', 'phone', 'either'],
+                ['Email', 'Phone', 'Either']
+            )
+        ]
     ];
 }
 
@@ -689,22 +675,43 @@ const fieldNameMap: FieldNameMap = {
     friendlyName: 'Friendly name',
     friendlyFullName: 'Friendly full name',
     grade: ['Grade', 'A number from 9-12'],
-    learner: ['Learner', 'This is an ID. You usually will not need to edit this by hand.'],
-    tutor: ['Tutor', 'This is an ID. You usually will not need to edit this by hand.'],
+    learner: [
+        'Learner',
+        'This is an ID. You usually will not need to edit this by hand.'
+    ],
+    tutor: [
+        'Tutor',
+        'This is an ID. You usually will not need to edit this by hand.'
+    ],
     attendance: ['Attendance data', 'Do not edit this by hand.'],
     status: 'Status',
-    mods: ['Mods', 'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'],
-    dropInMods: ['Drop-in mods', 'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'],
+    mods: [
+        'Mods',
+        'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'
+    ],
+    dropInMods: [
+        'Drop-in mods',
+        'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'
+    ],
     mod: ['Mod', 'A number from 1-20, corresponding to 1A-10B'],
-    modsPref: ['Preferred mods', 'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'],
+    modsPref: [
+        'Preferred mods',
+        'A comma-separated list of numbers from 1-20, corresponding to 1A-10B'
+    ],
     subjectList: 'Subjects',
-    request: ['Request', 'This is an ID. You usually will not need to edit this by hand.'],
+    request: [
+        'Request',
+        'This is an ID. You usually will not need to edit this by hand.'
+    ],
     subject: 'Subject(s)',
     studentId: 'Student ID',
     email: 'Email',
     phone: 'Phone',
     contactPref: 'Contact preference',
-    specialRoom: ['Special tutoring room', `Leave blank if the student isn't in special tutoring`],
+    specialRoom: [
+        'Special tutoring room',
+        `Leave blank if the student isn't in special tutoring`
+    ],
     id: ['ID', `Do not modify unless you really know what you're doing!`],
     date: ['Date', 'Date of creation -- do not change']
 };
@@ -813,7 +820,9 @@ const bookingsInfo: UnprocessedResourceInfo = {
     makeLabel: record =>
         tutors.state.getRecordOrFail(record.tutor).friendlyFullName +
         ' <> ' +
-        learners.state.getRecordOrFail(requests.state.getRecordOrFail(record.request).learner).friendlyFullName
+        learners.state.getRecordOrFail(
+            requests.state.getRecordOrFail(record.request).learner
+        ).friendlyFullName
 };
 
 const matchingsInfo: UnprocessedResourceInfo = {
@@ -854,7 +863,10 @@ const requestSubmissionsInfo: UnprocessedResourceInfo = {
         ['mods', NumberArrayField('number')],
         ['subject', StringField('text')],
         ['specialRoom', StringField('text')],
-        ['status', SelectField(['unchecked', 'checked'], ['Unchecked', 'Checked'])]
+        [
+            'status',
+            SelectField(['unchecked', 'checked'], ['Unchecked', 'Checked'])
+        ]
     ],
     fieldNameMap,
     tableFieldTitles: ['Name', 'Mods', 'Subject'],

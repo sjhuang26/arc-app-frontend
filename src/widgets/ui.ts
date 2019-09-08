@@ -7,7 +7,6 @@ THIS IS LITERALLY JUST A BIG UTILITIES FILE FOR WIDGETS.
 
 */
 
-
 /*export function LoaderWidget() {
     const spinner = container('<div></div>')(
         $('<strong>Loading...</strong>'),
@@ -32,6 +31,12 @@ THIS IS LITERALLY JUST A BIG UTILITIES FILE FOR WIDGETS.
         onError
     };
 }*/
+
+export function addPopoverToDom(dom: JQuery, popoverDom: JQuery): void {
+    dom.popover({
+        content: container('<span>')(...popoverDom.toArray())[0]
+    });
+}
 
 export function ErrorWidget(message: string): Widget {
     const dom = container('<div class="alert alert-danger"></div>')(
@@ -69,7 +74,7 @@ export function ButtonWidget(
 }
 
 const modalHtmlString = `<div class="modal" tabindex="-1" role="dialog">
-<div class="modal-dialog" role="document">
+<div class="modal-dialog modal-lg" role="document">
   <div class="modal-content">
     <div class="modal-header">
       <h5 class="modal-title"></h5>
@@ -88,28 +93,46 @@ const modalHtmlString = `<div class="modal" tabindex="-1" role="dialog">
 export async function showModal(
     title: string,
     content: string | JQuery,
-    buildButtons: (
-        buildButton: (
+    buildButtons: (buildButton: {
+        (
             text: string,
             style: string,
-            onClick?: () => void
-        ) => JQuery
-    ) => JQuery[]
+            onClick?: () => void,
+            preventAutoClose?: boolean
+        ): JQuery;
+        close: () => void;
+    }) => JQuery[]
 ): Promise<void> {
     const dom = $(modalHtmlString);
     dom.find('.modal-title').text(title);
     dom.find('.modal-body').append(
         typeof content === 'string' ? container('<p></p>')(content) : content
     );
+
+    // https://stackoverflow.com/questions/10466129/how-to-hide-bootstrap-modal-with-javascript
+    const closeModal = () => dom.modal('hide');
+
+    const buildButtonsParameterFunction = (
+        text: string,
+        style: string,
+        onClick?: () => void,
+        preventAutoClose?: boolean
+    ) =>
+        $('<button type="button" class="btn">')
+            .addClass('btn-' + style)
+            .click(() => {
+                if (onClick) {
+                    onClick();
+                }
+                if (!preventAutoClose) {
+                    closeModal();
+                }
+            })
+            .text(text);
+
+    buildButtonsParameterFunction.close = closeModal;
     dom.find('.modal-footer').append(
-        buildButtons.call(
-            null,
-            (text: string, style: string, onClick?: () => void) =>
-                $('<button type="button" class="btn" data-dismiss="modal">')
-                    .addClass('btn-' + style)
-                    .click(onClick)
-                    .text(text)
-        )
+        buildButtons(buildButtonsParameterFunction)
     );
     dom.modal();
     return new Promise(res => {

@@ -21,9 +21,6 @@ import {
     FormToggleWidget,
     MessageTemplateWidget
 } from '../widgets/ui';
-import { TilingWindowManagerWidget } from '../widgets/TilingWindowManager';
-import { WindowsBarWidget } from '../widgets/WindowsBar';
-import { useTiledWindow } from '../widgets/Window';
 import { TableWidget } from '../widgets/Table';
 import { ActionBarWidget } from '../widgets/ActionBar';
 import { AskStatus, getResultOrFail } from './server';
@@ -100,27 +97,29 @@ async function simpleStepWindow(
 
     let errorMessage: string = '';
     try {
-        const { closeWindow } = useTiledWindow(
+        showModal(
+            defaultWindowLabel.text(),
             container('<div></div>')(
                 container('<h1></h1>')(defaultWindowLabel),
-                makeContent(() => closeWindow)
+                makeContent(() => () => {}) // TODO
             ),
-            ActionBarWidget([['Close', () => closeWindow()]]).dom,
-            defaultWindowLabel.text()
+            bb => [bb('Close', 'primary')]
         );
     } catch (err) {
         const windowLabel = 'ERROR in: ' + defaultWindowLabel.text();
         errorMessage = stringifyError(err);
-        const { closeWindow } = useTiledWindow(
-            ErrorWidget(errorMessage).dom,
-            ActionBarWidget([['Close', () => closeWindow()]]).dom,
-            windowLabel
-        );
+        showModal(windowLabel, ErrorWidget(errorMessage).dom, bb => [
+            bb('Close', 'primary')
+        ]);
     }
 }
 
 function showTestingModeWarning() {
-    showModal('Testing mode loaded', 'The app has been disconnected from the actual database/forms and replaced with a blank test database with no data. Start by creating a tutor, learner, and request submission.', bb => [bb('OK', 'primary')]);
+    showModal(
+        'Testing mode loaded',
+        'The app has been disconnected from the actual database/forms and replaced with a blank test database with no data. Start by creating a tutor, learner, and request submission.',
+        bb => [bb('OK', 'primary')]
+    );
 }
 
 /*
@@ -143,10 +142,7 @@ async function checkRequestSubmissionsStep() {
                     // that the learner already exists in the database
                     const matches: Record[] = Object.values(
                         learners.state.getRecordCollectionOrFail()
-                    ).filter(
-                        x =>
-                            x.studentId === record.studentId
-                    );
+                    ).filter(x => x.studentId === record.studentId);
                     let learnerRecord: Record;
                     if (matches.length > 1) {
                         // duplicate learner student IDs??
@@ -225,7 +221,11 @@ async function checkRequestSubmissionsStep() {
                 ];
             }
         );
-        table.setAllValues(Object.values(recordCollection).filter(x => x.status === 'unchecked'));
+        table.setAllValues(
+            Object.values(recordCollection).filter(
+                x => x.status === 'unchecked'
+            )
+        );
         return table.dom;
     });
 }
@@ -307,7 +307,6 @@ async function handleRequestsAndBookingsStep() {
             if (x.status == 'unsent') {
                 y.currentStatus = 'Unsent';
             }
-
         }
 
         table.setAllValues(
@@ -333,10 +332,10 @@ async function showRequestBookerStep(requestId: number) {
     };
     await simpleStepWindow(
         'Booker for ' +
-        learners.createLabel(
-            requests.state.getRecordOrFail(requestId).learner,
-            x => x.friendlyFullName
-        ),
+            learners.createLabel(
+                requests.state.getRecordOrFail(requestId).learner,
+                x => x.friendlyFullName
+            ),
         closeWindow => {
             const matchingRecords = matchings.state.getRecordCollectionOrFail();
             const bookingRecords = bookings.state.getRecordCollectionOrFail();
@@ -377,18 +376,20 @@ async function showRequestBookerStep(requestId: number) {
                             booking.tutor,
                             x => x.friendlyFullName
                         ) +
-                        ' <> ' +
-                        learners.createLabel(
-                            requests.state.getRecordOrFail(booking.request)
-                                .learner,
-                            x => x.friendlyFullName
-                        ),
+                            ' <> ' +
+                            learners.createLabel(
+                                requests.state.getRecordOrFail(booking.request)
+                                    .learner,
+                                x => x.friendlyFullName
+                            ),
                         formSelectWidget.dom,
                         ButtonWidget('Todo', () =>
                             showBookingMessagerStep(booking.id)
                         ).dom,
                         ButtonWidget('Finalize', () => {
-                            finalizeBookingsStep(booking.id, () => closeWindow()());
+                            finalizeBookingsStep(booking.id, () =>
+                                closeWindow()()
+                            );
                         }).dom
                     ];
                 }
@@ -409,7 +410,7 @@ async function showRequestBookerStep(requestId: number) {
                             buttonsDom.append(
                                 ButtonWidget(
                                     modLabel + ' (already booked)',
-                                    () => { }
+                                    () => {}
                                 ).dom
                             );
                             continue;
@@ -552,7 +553,9 @@ async function showBookingMessagerStep(bookingId: number) {
                 );
                 dom.append(
                     MessageTemplateWidget(
-                        `Hi! Can you tutor a student in ${r.subject} on mod ${stringifyMod(b.mod)}?`
+                        `Hi! Can you tutor a student in ${
+                            r.subject
+                        } on mod ${stringifyMod(b.mod)}?`
                     ).dom
                 );
                 dom.append(
@@ -569,7 +572,9 @@ async function showBookingMessagerStep(bookingId: number) {
                 );
                 dom.append(
                     MessageTemplateWidget(
-                        `Hi! We have a tutor for you on mod ${stringifyMod(b.mod)}. Can you come?`
+                        `Hi! We have a tutor for you on mod ${stringifyMod(
+                            b.mod
+                        )}. Can you come?`
                     ).dom
                 );
                 dom.append(
@@ -664,11 +669,11 @@ async function finalizeMatchingsStep() {
                         record.learner,
                         x => x.friendlyFullName
                     ) +
-                    '<>' +
-                    tutors.createLabel(
-                        record.tutor,
-                        x => x.friendlyFullName
-                    ),
+                        '<>' +
+                        tutors.createLabel(
+                            record.tutor,
+                            x => x.friendlyFullName
+                        ),
                     formSelectWidget.dom,
                     ButtonWidget('Send', () => {
                         showMatchingSender(record.id);
@@ -703,11 +708,15 @@ async function showMatchingSender(matchingId: number) {
             return container('<div></div>')(
                 'Send this to the learner.',
                 MessageTemplateWidget(
-                    `You will be tutored by ${t.friendlyFullName} during mod ${stringifyMod(m.mod)}.`
+                    `You will be tutored by ${
+                        t.friendlyFullName
+                    } during mod ${stringifyMod(m.mod)}.`
                 ).dom,
                 'Then, send this to the tutor.',
                 MessageTemplateWidget(
-                    `You will be tutoring ${l.friendlyFullName} during mod ${stringifyMod(m.mod)}.`
+                    `You will be tutoring ${
+                        l.friendlyFullName
+                    } during mod ${stringifyMod(m.mod)}.`
                 ).dom
             );
         }
@@ -738,7 +747,13 @@ async function attendanceStep() {
         const table = TableWidget(
             // Both learners and tutors are students.
             ['Student', 'Total minutes', 'Attendance level', 'Details'],
-            ({ isLearner, student }: { isLearner: boolean, student: Record }) => {
+            ({
+                isLearner,
+                student
+            }: {
+                isLearner: boolean;
+                student: Record;
+            }) => {
                 // calculate the attendance level & totals
                 let numPresent = 0;
                 let numAbsent = 0;
@@ -766,26 +781,47 @@ async function attendanceStep() {
                 ];
             }
         );
-        table.setAllValues(t.map(x => ({ isLearner: false, student: x }))
-            .concat(l.map(x => ({ isLearner: true, student: x })))
+        table.setAllValues(
+            t
+                .map(x => ({ isLearner: false, student: x }))
+                .concat(l.map(x => ({ isLearner: true, student: x })))
         );
         return table.dom;
     });
 }
 
-async function attendanceDetailsStep({ isLearner, student }: { isLearner: boolean, student: Record }) {
-    await simpleStepWindow(container('<span>')(
-        'Attendance for ',
-        (isLearner ? learners : tutors).createMarker(student.id, x => x.friendlyFullName)),
+async function attendanceDetailsStep({
+    isLearner,
+    student
+}: {
+    isLearner: boolean;
+    student: Record;
+}) {
+    await simpleStepWindow(
+        container('<span>')(
+            'Attendance for ',
+            (isLearner ? learners : tutors).createMarker(
+                student.id,
+                x => x.friendlyFullName
+            )
+        ),
         _closeWindow => {
             const table = TableWidget(
                 // Both learners and tutors are students.
                 ['Date', 'Mod', 'Present?'],
-                (attendanceEntry: { date: number, mod: number, minutes: number }) => {
+                (attendanceEntry: {
+                    date: number;
+                    mod: number;
+                    minutes: number;
+                }) => {
                     return [
-                        new Date(attendanceEntry.date).toISOString().substring(0, 10),
+                        new Date(attendanceEntry.date)
+                            .toISOString()
+                            .substring(0, 10),
                         String(attendanceEntry.mod),
-                        attendanceEntry.minutes > 0 ? `P (${attendanceEntry.minutes} minutes)` : $('<span style="color:red">ABSENT</span>')
+                        attendanceEntry.minutes > 0
+                            ? `P (${attendanceEntry.minutes} minutes)`
+                            : $('<span style="color:red">ABSENT</span>')
                     ];
                 }
             );
@@ -873,13 +909,8 @@ export function rootWidget(): Widget {
         container('<nav class="navbar layout-item-fit">')(
             $('<strong class="mr-4">ARC</strong>'),
             PillsWidget().dom
-        ),
-        container('<nav class="navbar layout-item-fit layout-v"></div>')(
-            WindowsBarWidget().dom
-        ),
-        container('<div class="layout-item-scroll"></div>')(
-            TilingWindowManagerWidget().dom
         )
+        // TODO add AppRefresher
     );
     if (window['APP_DEBUG_MOCK'] === 1) showTestingModeWarning();
     return { dom };
