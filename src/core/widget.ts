@@ -158,7 +158,7 @@ async function finalizeBookingsStep(
                 tutor: b.tutor,
                 subject: r.subject,
                 mod: b.mod,
-                status: 'unwritten',
+                status: 'finalized',
                 specialRoom: r.specialRoom,
                 id: -1,
                 date: -1
@@ -167,6 +167,7 @@ async function finalizeBookingsStep(
                 throw ask.message;
             }
             // DELETE ALL BOOKINGS FOR REQUEST
+            // (TODO: THIS WILL BE MOVED TO A SEPARATE COMMAND)
             for (const booking of Object.values(
                 bookings.state.getRecordCollectionOrFail()
             )) {
@@ -187,10 +188,6 @@ async function finalizeBookingsStep(
     } else {
         return false;
     }
-}
-
-async function finalizeMatchingsStep() {
-    // code removed
 }
 
 interface NavigationScope {
@@ -618,7 +615,11 @@ function scheduleEditNavigationScope(): NavigationScope {
                 editedDropInMods.sort();
                 if (!arrayEqual(oldDropInMods, editedDropInMods)) {
                     wereChanges = true;
-                    tutorRecords[idString].dropInMods = editedDropInMods;
+
+                    // this gets rid of duplicates as well
+                    tutorRecords[idString].dropInMods = [
+                        ...new Set(editedDropInMods)
+                    ];
                     getResultOrFail(
                         await tutors.state.updateRecord(tutorRecords[idString])
                     );
@@ -706,7 +707,8 @@ function scheduleEditNavigationScope(): NavigationScope {
                 ] = ['matched', matching.id];
             }
             function generatePopupAvailable(id: number, mod: number) {
-                const initialStatus = tutorModStatusIndex[id].modStatus[mod];
+                const initialStatus =
+                    tutorModStatusIndex[id].modStatus[mod - 1];
                 if (typeof initialStatus !== 'string') {
                     throw new Error(
                         'typecheck failed in generatePopupSchedule'
@@ -726,7 +728,7 @@ function scheduleEditNavigationScope(): NavigationScope {
                     .append(element);
                 const contentDom = container('<span>')('Actions:');
                 for (let i = 0; i < 20; ++i) {
-                    if (i + 1 === mod) continue;
+                    // if (i + 1 === mod) continue;
                     const status = tutorModStatusIndex[id].modStatus[i];
                     if (
                         typeof status !== 'string' ||
@@ -734,22 +736,27 @@ function scheduleEditNavigationScope(): NavigationScope {
                     )
                         continue;
                     contentDom.append(
-                        ButtonWidget(String(i + 1), () => {
-                            const arr = editedDropInModsIndex[id];
-                            // add the new mod
-                            arr.push(i + 1);
-                            // sort
-                            arr.sort();
-                            // edit status index
-                            tutorModStatusIndex[id].modStatus[i + 1] =
-                                status === 'availablePref'
-                                    ? 'dropInPref'
-                                    : 'dropIn';
-                            // hide popover
-                            element.popover('hide');
-                            // rebind data handler
-                            generatePopupSchedule(id, i + 1);
-                        }).dom
+                        ButtonWidget(
+                            String(i + 1) +
+                                (status === 'availablePref' ? '*' : ''),
+                            () => {
+                                const arr = editedDropInModsIndex[id];
+                                // add the new mod
+                                arr.push(i + 1);
+                                // sort
+                                arr.sort();
+                                // edit status index
+                                tutorModStatusIndex[id].modStatus[i] =
+                                    tutorModStatusIndex[id].modStatus[i] ===
+                                    'availablePref'
+                                        ? 'dropInPref'
+                                        : 'dropIn';
+                                // hide popover
+                                element.popover('hide');
+                                // rebind data handler
+                                generatePopupSchedule(id, i + 1);
+                            }
+                        ).dom
                     );
                 }
                 element.popover({
@@ -760,7 +767,9 @@ function scheduleEditNavigationScope(): NavigationScope {
                 });
             }
             function generatePopupSchedule(id: number, mod: number) {
-                const initialStatus = tutorModStatusIndex[id].modStatus[mod];
+                console.log(tutorModStatusIndex);
+                const initialStatus =
+                    tutorModStatusIndex[id].modStatus[mod - 1];
                 if (typeof initialStatus !== 'string') {
                     throw new Error(
                         'typecheck failed in generatePopupSchedule'
@@ -790,24 +799,37 @@ function scheduleEditNavigationScope(): NavigationScope {
                     )
                         continue;
                     contentDom.append(
-                        ButtonWidget(String(i + 1), () => {
-                            // remove the mod entirely
-                            const arr = editedDropInModsIndex[id];
-                            arr.splice(arr.indexOf(mod), 1);
-                            // sort
-                            arr.sort();
-                            // edit status index
-                            tutorModStatusIndex[id].modStatus[i + 1] =
-                                status === 'dropInPref'
-                                    ? 'availablePref'
-                                    : 'available';
-                            // destroy element
-                            element.remove();
-                            // dispose popover
-                            element.popover('dispose');
-                            // recreate popup
-                            generatePopupSchedule(id, i + 1);
-                        }).dom
+                        ButtonWidget(
+                            String(i + 1) +
+                                (status === 'availablePref' ? '*' : ''),
+                            () => {
+                                // remove the mod
+                                const arr = editedDropInModsIndex[id];
+                                arr.splice(arr.indexOf(mod), 1);
+                                // add the mod
+                                arr.push(i + 1);
+                                // sort
+                                arr.sort();
+                                // edit status index
+                                tutorModStatusIndex[id].modStatus[mod - 1] =
+                                    tutorModStatusIndex[id].modStatus[
+                                        mod - 1
+                                    ] === 'dropInPref'
+                                        ? 'availablePref'
+                                        : 'available';
+                                tutorModStatusIndex[id].modStatus[i] =
+                                    tutorModStatusIndex[id].modStatus[i] ===
+                                    'availablePref'
+                                        ? 'dropInPref'
+                                        : 'dropIn';
+                                // dispose popover
+                                element.popover('dispose');
+                                // destroy element
+                                element.remove();
+                                // recreate popup
+                                generatePopupSchedule(id, i + 1);
+                            }
+                        ).dom
                     );
                 }
                 contentDom.append(
@@ -818,8 +840,9 @@ function scheduleEditNavigationScope(): NavigationScope {
                         // sort
                         arr.sort();
                         // edit status index
-                        tutorModStatusIndex[id].modStatus[mod] =
-                            status === 'dropInPref'
+                        tutorModStatusIndex[id].modStatus[mod - 1] =
+                            tutorModStatusIndex[id].modStatus[mod - 1] ===
+                            'dropInPref'
                                 ? 'availablePref'
                                 : 'available';
                         // detach element
@@ -835,6 +858,75 @@ function scheduleEditNavigationScope(): NavigationScope {
                     trigger: 'click'
                 });
             }
+            function generatePopupScheduleMatch(id: number, mod: number) {
+                const initialStatus =
+                    tutorModStatusIndex[id].modStatus[mod - 1];
+                if (!Array.isArray(initialStatus)) {
+                    throw new Error(
+                        'typecheck failed in generatePopupScheduleMatch'
+                    );
+                }
+                const matchingId = initialStatus[1] as number;
+                const element = container(
+                    '<li class="text-danger list-group-item">'
+                )(
+                    matchings.createLabel(
+                        matchingId,
+                        x =>
+                            tutors.createLabel(
+                                x.tutor,
+                                y => y.friendlyFullName
+                            ) + ' (matched)'
+                    )
+                );
+                scheduleDom
+                    .children()
+                    .eq(mod - 1)
+                    .children()
+                    .eq(1)
+                    .append(element);
+                const contentDom = container('<span>')('Details:');
+                contentDom.append(
+                    matchings.createDomLabel(matchingId, x =>
+                        container('<span>')(
+                            tutors.createFriendlyMarker(
+                                x.tutor,
+                                y => y.friendlyFullName
+                            ),
+                            ' <> ',
+                            learners.createFriendlyMarker(
+                                x.learner,
+                                y => y.friendlyFullName
+                            )
+                        )
+                    )
+                );
+                element.popover({
+                    content: contentDom[0],
+                    placement: 'auto',
+                    html: true,
+                    trigger: 'click'
+                });
+            }
+            function generatePopupScheduleBook(id: number, mod: number) {
+                const initialStatus =
+                    tutorModStatusIndex[id].modStatus[mod - 1];
+                if (!Array.isArray(initialStatus)) {
+                    throw new Error(
+                        'typecheck failed in generatePopupScheduleBook'
+                    );
+                }
+                const element = container(
+                    '<li class="text-danger list-group-item">'
+                )(tutors.createLabel(id, x => x.friendlyFullName), ' (booked)');
+                scheduleDom
+                    .children()
+                    .eq(mod - 1)
+                    .children()
+                    .eq(1)
+                    .append(element);
+            }
+
             for (const { id, modStatus } of Object.values(
                 tutorModStatusIndex
             )) {
@@ -842,12 +934,15 @@ function scheduleEditNavigationScope(): NavigationScope {
                     const status = modStatus[i];
                     if (Array.isArray(status)) {
                         if (status[0] === 'matched') {
+                            generatePopupScheduleMatch(id, i + 1);
                         }
                         if (status[0] === 'booked') {
+                            generatePopupScheduleBook(id, i + 1);
                         }
                     }
                     if (typeof status === 'string') {
                         if (status.startsWith('dropIn')) {
+                            generatePopupAvailable(id, i + 1);
                             generatePopupSchedule(id, i + 1);
                         }
                         if (status.startsWith('available')) {
@@ -1047,10 +1142,12 @@ export function rootWidget(): Widget {
     }
     function generateSidebar(content?: JQuery): void {
         sidebarDom.empty();
-        sidebarDom.removeClass('col-4 overflow-auto app-sidebar');
+        sidebarDom.removeClass('col-4 overflow-auto app-sidebar d-none');
         if (content) {
             sidebarDom.addClass('col-4 overflow-auto app-sidebar');
             sidebarDom.append(content);
+        } else {
+            sidebarDom.addClass('d-none');
         }
     }
     function generateMainContentPanel(content?: JQuery): void {
@@ -1082,15 +1179,12 @@ export function rootWidget(): Widget {
                 // SCHEDULER
                 if (text == 'Handle requests') {
                     renavigate(['requests'], false);
-                    //handleRequestsAndBookingsStep();
                 }
                 if (text == 'Edit schedule') {
                     renavigate(['scheduleEdit'], false);
-                    //finalizeMatchingsStep();
                 }
                 if (text == 'View schedule') {
                     renavigate(['scheduleView'], false);
-                    //finalizeMatchingsStep();
                 }
 
                 // ATTENDANCE

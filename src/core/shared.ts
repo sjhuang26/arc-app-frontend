@@ -345,6 +345,16 @@ export class Resource {
         }
     }
 
+    createDomLabel(id: number, builder: (record: Record) => JQuery): JQuery {
+        try {
+            const record = this.state.getRecordOrFail(id);
+            return builder.call(null, record);
+        } catch (e) {
+            console.error(e);
+            return $(`<span>(??? UNKNOWN #${String(id)} ???)</span>`);
+        }
+    }
+
     // The edit window is kind of combined with the view window.
     async makeTiledEditWindow(id: number): Promise<void> {
         let record: Record = null;
