@@ -11,7 +11,8 @@ import {
     stringifyError,
     Record,
     stringifyMod,
-    alertError
+    alertError,
+    arrayEqual
 } from './shared';
 import {
     ButtonWidget,
@@ -74,32 +75,6 @@ const navigationBarString = `
         </div>
     </li>
 </ul>`;
-
-async function simpleStepWindow(
-    defaultWindowLabel: JQuery | string,
-    makeContent: (closeWindow: () => () => void) => JQuery
-): Promise<void> {
-    if (typeof defaultWindowLabel === 'string')
-        defaultWindowLabel = container('<span></span>')(defaultWindowLabel);
-
-    let errorMessage: string = '';
-    try {
-        showModal(
-            defaultWindowLabel.text(),
-            container('<div></div>')(
-                container('<h1></h1>')(defaultWindowLabel),
-                makeContent(() => () => {}) // TODO
-            ),
-            bb => [bb('Close', 'primary')]
-        );
-    } catch (err) {
-        const windowLabel = 'ERROR in: ' + defaultWindowLabel.text();
-        errorMessage = stringifyError(err);
-        showModal(windowLabel, ErrorWidget(errorMessage).dom, bb => [
-            bb('Close', 'primary')
-        ]);
-    }
-}
 
 function showTestingModeWarning() {
     showModal(
@@ -389,12 +364,12 @@ function requestsNavigationScope(
             type PotentialTableRowArgs = {
                 tutorId: number;
                 mods: PotentialTableRowModArgs[];
-                numBookings: number;
             };
             type PotentialTableRowModArgs = {
                 mod: number;
                 isPref: boolean;
                 isAlreadyBooked: boolean;
+                isAlreadyDropIn: boolean;
             };
             const header = container('<h1>')(
                 'Request: ',
@@ -452,11 +427,19 @@ function requestsNavigationScope(
             // - Clicking "Save bookings and close" will write to the database
             let bookingsInfo: { tutorId: number; mod: number }[] = [];
             const potentialTable = TableWidget(
-                ['Tutor', '# times booked', 'Book for mods...'],
-                ({ tutorId, mods, numBookings }: PotentialTableRowArgs) => {
+                ['Tutor', 'Book for mods...'],
+                ({ tutorId, mods }: PotentialTableRowArgs) => {
                     const buttonsDom = $('<div></div>');
-                    for (const { mod, isPref, isAlreadyBooked } of mods) {
-                        const modLabel = mod + (isPref ? '*' : '');
+                    for (const {
+                        mod,
+                        isPref,
+                        isAlreadyBooked,
+                        isAlreadyDropIn
+                    } of mods) {
+                        const modLabel =
+                            mod +
+                            (isPref ? '*' : '') +
+                            (isAlreadyDropIn ? ' (drop-in)' : '');
                         if (isAlreadyBooked) {
                             buttonsDom.append(
                                 ButtonWidget(
@@ -490,7 +473,6 @@ function requestsNavigationScope(
                             tutorId,
                             x => x.friendlyFullName
                         ),
-                        String(numBookings),
                         buttonsDom
                     ];
                 }
@@ -540,16 +522,18 @@ function requestsNavigationScope(
                             modResults.push({
                                 mod,
                                 isPref: tutorRecord.modsPref.includes(mod),
-                                isAlreadyBooked: tutor.bookedMods.includes(mod)
+                                isAlreadyBooked: tutor.bookedMods.includes(mod),
+                                isAlreadyDropIn: tutorRecord.dropInMods.includes(
+                                    mod
+                                )
                             });
                         }
                     }
                 }
-                if (modResults.length > 0) {
+                if (modResults.length > 0 && tutor.bookedMods.length === 0) {
                     tableValues.push({
                         tutorId: tutor.id,
-                        mods: modResults,
-                        numBookings: tutor.bookedMods.length
+                        mods: modResults
                     });
                 }
             }
@@ -602,7 +586,290 @@ function requestsNavigationScope(
     };
 }
 
-function scheduleEditNavigationScope(): NavigationScope {}
+function scheduleEditNavigationScope(): NavigationScope {
+    const learnerRecords = learners.state.getRecordCollectionOrFail();
+    const bookingRecords = bookings.state.getRecordCollectionOrFail();
+    const matchingRecords = matchings.state.getRecordCollectionOrFail();
+    const requestRecords = requests.state.getRecordCollectionOrFail();
+    const tutorRecords = tutors.state.getRecordCollectionOrFail();
+    const requestSubmissionRecords = requestSubmissions.state.getRecordCollectionOrFail();
+
+    // CREATE AN INDEX OF OLD DROP-IN MODS
+    const oldDropInModsIndex: { [id: number]: number[] } = {};
+    for (const tutor of Object.values(tutorRecords)) {
+        oldDropInModsIndex[tutor.id] = tutor.dropInMods;
+    }
+
+    // CREATE AN INDEX OF EDITED DROP-IN MODS (DEEP COPY)
+    const editedDropInModsIndex: { [id: number]: number[] } = JSON.parse(
+        JSON.stringify(oldDropInModsIndex)
+    );
+
+    // ON SAVE, COMPARE THE TWO INDEXES
+    async function onSave() {
+        const { closeModal } = showModal('Saving...', '', bb => []);
+        try {
+            let wereChanges = false;
+            for (const [idString, oldDropInMods] of Object.entries(
+                oldDropInModsIndex
+            )) {
+                oldDropInMods.sort();
+                const editedDropInMods = editedDropInModsIndex[idString];
+                editedDropInMods.sort();
+                if (!arrayEqual(oldDropInMods, editedDropInMods)) {
+                    wereChanges = true;
+                    tutorRecords[idString].dropInMods = editedDropInMods;
+                    getResultOrFail(
+                        await tutors.state.updateRecord(tutorRecords[idString])
+                    );
+                }
+            }
+            if (!wereChanges) {
+                // no changes
+                showModal(
+                    'No changes were detected in the schedule, so nothing was saved.',
+                    '',
+                    bb => [bb('OK', 'primary')]
+                );
+            }
+        } catch (e) {
+            alertError(e);
+        } finally {
+            closeModal();
+        }
+    }
+    return {
+        generateMainContentPanel(): JQuery {
+            // INIT DOM
+            const availableDom = container('<div>')();
+            for (let i = 0; i < 20; ++i) {
+                availableDom.append(
+                    container('<div>')(
+                        $('<p><strong></strong></p>').text(`Mod ${i + 1}`),
+                        container('<ul class="list-group">')()
+                    )
+                );
+            }
+            const scheduleDom = container('<div>')();
+            for (let i = 0; i < 20; ++i) {
+                scheduleDom.append(
+                    container('<div>')(
+                        $('<p><strong></strong></p>').text(`Mod ${i + 1}`),
+                        container('<ul class="list-group">')()
+                    )
+                );
+            }
+
+            // CREATE INDEX OF TUTORS --> [ STATUS, STATUS, STATUS ... ] for each mod
+            const tutorModStatusIndex: {
+                [id: number]: {
+                    id: number;
+                    modStatus: (string | (string | number)[])[];
+                };
+            } = {};
+            for (const tutor of Object.values(tutorRecords)) {
+                tutorModStatusIndex[tutor.id] = {
+                    id: tutor.id,
+                    modStatus: []
+                };
+                for (let i = 0; i < 20; ++i) {
+                    tutorModStatusIndex[tutor.id].modStatus.push('none');
+                }
+                // mod status: available
+                for (const mod of tutor.mods) {
+                    tutorModStatusIndex[tutor.id].modStatus[mod - 1] =
+                        'available';
+                }
+                // mod status: drop-in
+                for (const mod of tutor.dropInMods) {
+                    if (
+                        tutorModStatusIndex[tutor.id].modStatus[mod - 1] ===
+                        'available'
+                    ) {
+                        tutorModStatusIndex[tutor.id].modStatus[mod - 1] =
+                            'dropIn';
+                    }
+                }
+                // preferred mods
+                for (const mod of tutor.modsPref) {
+                    tutorModStatusIndex[tutor.id].modStatus[mod - 1] += 'Pref';
+                }
+            }
+            for (const booking of Object.values(bookingRecords)) {
+                tutorModStatusIndex[booking.tutor].modStatus[
+                    booking.mod - 1
+                ] = ['booked', booking.id];
+            }
+            for (const matching of Object.values(matchingRecords)) {
+                tutorModStatusIndex[matching.tutor].modStatus[
+                    matching.mod - 1
+                ] = ['matched', matching.id];
+            }
+            function generatePopupAvailable(id: number, mod: number) {
+                const initialStatus = tutorModStatusIndex[id].modStatus[mod];
+                if (typeof initialStatus !== 'string') {
+                    throw new Error(
+                        'typecheck failed in generatePopupSchedule'
+                    );
+                }
+                const element = container(
+                    '<li class="list-group-item list-group-item-action">'
+                )(
+                    tutors.createLabel(id, x => x.friendlyFullName),
+                    initialStatus.endsWith('Pref') ? ' (preferred)' : ''
+                );
+                availableDom
+                    .children()
+                    .eq(mod - 1)
+                    .children()
+                    .eq(1)
+                    .append(element);
+                const contentDom = container('<span>')('Actions:');
+                for (let i = 0; i < 20; ++i) {
+                    if (i + 1 === mod) continue;
+                    const status = tutorModStatusIndex[id].modStatus[i];
+                    if (
+                        typeof status !== 'string' ||
+                        !status.startsWith('available')
+                    )
+                        continue;
+                    contentDom.append(
+                        ButtonWidget(String(i + 1), () => {
+                            const arr = editedDropInModsIndex[id];
+                            // add the new mod
+                            arr.push(i + 1);
+                            // sort
+                            arr.sort();
+                            // edit status index
+                            tutorModStatusIndex[id].modStatus[i + 1] =
+                                status === 'availablePref'
+                                    ? 'dropInPref'
+                                    : 'dropIn';
+                            // hide popover
+                            element.popover('hide');
+                            // rebind data handler
+                            generatePopupSchedule(id, i + 1);
+                        }).dom
+                    );
+                }
+                element.popover({
+                    content: contentDom[0],
+                    placement: 'auto',
+                    html: true,
+                    trigger: 'click'
+                });
+            }
+            function generatePopupSchedule(id: number, mod: number) {
+                const initialStatus = tutorModStatusIndex[id].modStatus[mod];
+                if (typeof initialStatus !== 'string') {
+                    throw new Error(
+                        'typecheck failed in generatePopupSchedule'
+                    );
+                }
+                const element = container(
+                    '<li class="list-group-item list-group-item-action">'
+                )(
+                    tutors.createLabel(id, x => x.friendlyFullName),
+                    ' (drop-in)',
+                    initialStatus.endsWith('Pref') ? ' (preferred)' : ''
+                );
+                scheduleDom
+                    .children()
+                    .eq(mod - 1)
+                    .children()
+                    .eq(1)
+                    .append(element);
+
+                const contentDom = container('<span>')('Actions:');
+                for (let i = 0; i < 20; ++i) {
+                    if (i + 1 === mod) continue;
+                    const status = tutorModStatusIndex[id].modStatus[i];
+                    if (
+                        typeof status !== 'string' ||
+                        !status.startsWith('available')
+                    )
+                        continue;
+                    contentDom.append(
+                        ButtonWidget(String(i + 1), () => {
+                            // remove the mod entirely
+                            const arr = editedDropInModsIndex[id];
+                            arr.splice(arr.indexOf(mod), 1);
+                            // sort
+                            arr.sort();
+                            // edit status index
+                            tutorModStatusIndex[id].modStatus[i + 1] =
+                                status === 'dropInPref'
+                                    ? 'availablePref'
+                                    : 'available';
+                            // destroy element
+                            element.remove();
+                            // dispose popover
+                            element.popover('dispose');
+                            // recreate popup
+                            generatePopupSchedule(id, i + 1);
+                        }).dom
+                    );
+                }
+                contentDom.append(
+                    ButtonWidget('X', () => {
+                        // remove the mod entirely
+                        const arr = editedDropInModsIndex[id];
+                        arr.splice(arr.indexOf(mod), 1);
+                        // sort
+                        arr.sort();
+                        // edit status index
+                        tutorModStatusIndex[id].modStatus[mod] =
+                            status === 'dropInPref'
+                                ? 'availablePref'
+                                : 'available';
+                        // detach element
+                        element.detach();
+                        // dispose popover
+                        element.popover('dispose');
+                    }).dom
+                );
+                element.popover({
+                    content: contentDom[0],
+                    placement: 'auto',
+                    html: true,
+                    trigger: 'click'
+                });
+            }
+            for (const { id, modStatus } of Object.values(
+                tutorModStatusIndex
+            )) {
+                for (let i = 0; i < 20; ++i) {
+                    const status = modStatus[i];
+                    if (Array.isArray(status)) {
+                        if (status[0] === 'matched') {
+                        }
+                        if (status[0] === 'booked') {
+                        }
+                    }
+                    if (typeof status === 'string') {
+                        if (status.startsWith('dropIn')) {
+                            generatePopupSchedule(id, i + 1);
+                        }
+                        if (status.startsWith('available')) {
+                            generatePopupAvailable(id, i + 1);
+                        }
+                    }
+                }
+            }
+            return container('<div class="layout-h">')(
+                container('<div class="overflow-auto">')(
+                    container('<h1>')('Available'),
+                    availableDom
+                ),
+                container('<div class="overflow-auto">')(
+                    container('<h1>')('Schedule'),
+                    ButtonWidget('Save', () => onSave()).dom,
+                    scheduleDom
+                )
+            );
+        }
+    };
+}
 
 function scheduleViewNavigationScope(): NavigationScope {}
 
@@ -788,14 +1055,10 @@ export function rootWidget(): Widget {
     }
     function generateMainContentPanel(content?: JQuery): void {
         mainContentPanelDom.empty();
-        mainContentPanelDom.removeClass(
-            'col-8 app-content-panel overflow-auto'
-        );
+        mainContentPanelDom.removeClass('col app-content-panel layout-v');
         if (content) {
             mainContentPanelDom.append(content);
-            mainContentPanelDom.addClass(
-                'col-8 app-content-panel overflow-auto'
-            );
+            mainContentPanelDom.addClass('col app-content-panel layout-v');
         }
     }
     function generateNavigationBar(): HTMLElement {
@@ -879,7 +1142,10 @@ export function rootWidget(): Widget {
             $('<strong class="mr-4">ARC</strong>'),
             generateNavigationBar()
         ),
-        container('<div class="row m-4">')(sidebarDom, mainContentPanelDom)
+        container('<div class="row m-4 layout-h">')(
+            sidebarDom,
+            mainContentPanelDom
+        )
     );
     if (window['APP_DEBUG_MOCK'] === 1) showTestingModeWarning();
     return { dom };

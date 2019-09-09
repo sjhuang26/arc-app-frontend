@@ -292,7 +292,7 @@ export const mockResourceServerEndpoints = {
                 email: 'asdfasdf@gmail.com',
                 phone: '555-555-5555',
                 contactPref: 'either',
-                mods: [2, 17, 18],
+                mods: [3],
                 subject: 'English',
                 specialRoom: '',
                 status: 'unchecked'
@@ -309,7 +309,7 @@ export const mockResourceServerEndpoints = {
                 email: 's',
                 phone: 's',
                 contactPref: 'email',
-                mods: [1],
+                mods: [3],
                 subject: 'Math',
                 specialRoom: '',
                 status: 'unchecked'
@@ -326,7 +326,7 @@ export const mockResourceServerEndpoints = {
                 email: 'undefined',
                 phone: 'undefined',
                 contactPref: 'either',
-                mods: [16],
+                mods: [3],
                 subject: 'all subjects',
                 specialRoom: 'B812',
                 status: 'unchecked'
