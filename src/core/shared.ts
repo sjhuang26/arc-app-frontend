@@ -794,24 +794,8 @@ const bookingsInfo: UnprocessedResourceInfo = {
         [
             'status',
             SelectField(
-                [
-                    'unsent',
-                    'waitingForTutor',
-                    'waitingForLearner',
-                    'finalized',
-                    'rejected',
-                    'rejectedByTutor',
-                    'rejectedByLearner'
-                ],
-                [
-                    'Unsent',
-                    'Waiting for tutor',
-                    'Waiting for learner',
-                    'Finalized',
-                    'Rejected',
-                    'Rejected by tutor',
-                    'Rejected by learner'
-                ]
+                ['unsent', 'waitingForTutor', 'rejected'],
+                ['Unsent', 'Waiting', 'Rejected']
             )
         ]
     ],

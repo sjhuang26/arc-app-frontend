@@ -44,7 +44,7 @@ async function isOperationConfirmedByUser(args: {}): Promise<boolean> {
 const navigationBarString = `
 <ul class="nav nav-pills">
     <li class="nav-item dropdown">
-        <a class="nav-link dropdown-toggle" data-toggle="dropdown">View, edit, and add information</a>
+        <a class="nav-link dropdown-toggle" data-toggle="dropdown">Advanced data editor</a>
         <div class="dropdown-menu dropdown-menu-right">
             <a class="dropdown-item">Tutors</a>
             <a class="dropdown-item">Learners</a>
@@ -55,7 +55,7 @@ const navigationBarString = `
         </div>
     </li>
     <li class="nav-item dropdown">
-        <a class="nav-link dropdown-toggle" data-toggle="dropdown">Scheduling workflow</a>
+        <a class="nav-link dropdown-toggle" data-toggle="dropdown">Scheduling steps</a>
         <div class="dropdown-menu dropdown-menu-right">
             <a class="dropdown-item">Handle requests</a>
             <a class="dropdown-item">Edit schedule</a>
@@ -104,7 +104,7 @@ async function simpleStepWindow(
 function showTestingModeWarning() {
     showModal(
         'Testing mode loaded',
-        'The app has been disconnected from the actual database/forms and replaced with a blank test database with no data. Start by creating a tutor, learner, and request submission.',
+        'The app has been disconnected from the actual database/forms and replaced with a database with test data.',
         bb => [bb('OK', 'primary')]
     );
 }
@@ -124,81 +124,56 @@ type RequestIndexEntry = {
     currentStatus: string;
 };
 
-async function showBookingMessagerStep(bookingId: number) {
+function showBookingMessagerStep(bookingId: number) {
     const b = bookings.state.getRecordOrFail(bookingId);
     const r = requests.state.getRecordOrFail(b.request);
+    const t = tutors.state.getRecordOrFail(b.tutor);
+    const l = learners.state.getRecordOrFail(r.learner);
 
-    await simpleStepWindow(
-        container('<span></span>')(
-            'Messager for ',
-            learners.createDataEditorMarker(r.learner, x => x.friendlyFullName),
-            ' <> ',
-            tutors.createDataEditorMarker(b.tutor, x => x.friendlyFullName)
+    const dom = $('<div></div>');
+
+    if (b.status === 'unsent') {
+        dom.append($('<p>Contact the tutor:</p>'));
+        dom.append(
+            MessageTemplateWidget(
+                `Hi! Can you tutor a student in ${
+                    r.subject
+                } on mod ${stringifyMod(b.mod)}?`
+            ).dom
+        );
+    }
+    if (b.status === 'waitingForTutor') {
+        dom.append($('<p>You are waiting for the tutor.</p>'));
+    }
+
+    showModal(
+        'Messager',
+        container('<div>')(
+            container('<h1>')(
+                'Messager for ',
+                learners.createDataEditorMarker(
+                    r.learner,
+                    x => x.friendlyFullName
+                ),
+                ' <> ',
+                tutors.createDataEditorMarker(b.tutor, x => x.friendlyFullName)
+            ),
+            dom
         ),
-        closeWindow => {
-            const dom = $('<div></div>');
-
-            if (b.status === 'unsent') {
-                dom.append(
-                    $(
-                        '<p>Because status is "unsent", send the message to the tutor:</p>'
-                    )
-                );
-                dom.append(
-                    MessageTemplateWidget(
-                        `Hi! Can you tutor a student in ${
-                            r.subject
-                        } on mod ${stringifyMod(b.mod)}?`
-                    ).dom
-                );
-                dom.append(
-                    $(
-                        '<p>Once you send the message, go back and set the status to "waiting for tutor".</p>'
-                    )
-                );
-            }
-            if (b.status === 'waitingForTutor') {
-                dom.append(
-                    $(
-                        '<p>You are waiting for the tutor. Once the tutor replies, send a message to the learner:</p>'
-                    )
-                );
-                dom.append(
-                    MessageTemplateWidget(
-                        `Hi! We have a tutor for you on mod ${stringifyMod(
-                            b.mod
-                        )}. Can you come?`
-                    ).dom
-                );
-                dom.append(
-                    $(
-                        '<p>Once you send the message, go back and set the status to "waiting for learner".</p>'
-                    )
-                );
-            }
-            if (b.status === 'waitingForLearner') {
-                dom.append(
-                    $(
-                        '<p>You are waiting for the learner. Once the learner replies, if everything is good, go back and click "finalize".</p>'
-                    )
-                );
-            }
-
-            return dom;
-        }
+        bb => [bb('OK', 'primary')]
     );
 }
 
 async function finalizeBookingsStep(
     bookingId: number,
-    onVerify: () => void
+    onFinish: () => void
 ): Promise<boolean> {
     if (
         await isOperationConfirmedByUser(
             'Are you sure you want to match these students?'
         )
     ) {
-        onVerify();
+        const { closeModal } = showModal('Saving...', '', bb => []);
         try {
             const b = bookings.state.getRecordOrFail(bookingId);
             const r = requests.state.getRecordOrFail(b.request);
@@ -229,6 +204,9 @@ async function finalizeBookingsStep(
             }
         } catch (err) {
             alert(stringifyError(err));
+        } finally {
+            closeModal();
+            onFinish();
         }
         return true;
     } else {
@@ -419,7 +397,7 @@ function requestsNavigationScope(
                 isAlreadyBooked: boolean;
             };
             const header = container('<h1>')(
-                'Booker for ',
+                'Request: ',
                 learners.createFriendlyMarker(
                     requests.state.getRecordOrFail(requestId).learner,
                     x => x.friendlyFullName
@@ -427,25 +405,11 @@ function requestsNavigationScope(
             );
 
             const table = TableWidget(
-                ['Booking', 'Mark as...', 'Todo', 'Finalize'],
+                ['Booking', 'Status', 'Todo', 'Match'],
                 (booking: Record) => {
                     const formSelectWidget = FormSelectWidget(
-                        [
-                            'unsent',
-                            'waitingForTutor',
-                            'waitingForLearner',
-                            'rejectedByTutor',
-                            'rejectedByLearner',
-                            'rejected'
-                        ],
-                        [
-                            'Unsent',
-                            'Waiting for tutor',
-                            'Waiting for learner',
-                            'Rejected by tutor',
-                            'Rejected by learner',
-                            'Rejected for other reason'
-                        ]
+                        ['unsent', 'waitingForTutor', 'rejected'],
+                        ['Unsent', 'Waiting', 'Rejected']
                     );
                     formSelectWidget.setValue(booking.status);
                     formSelectWidget.onChange(async newVal => {
@@ -531,35 +495,6 @@ function requestsNavigationScope(
                     ];
                 }
             );
-            const saveBookingsButton = ButtonWidget(
-                'Save bookings',
-                async () => {
-                    try {
-                        const { closeModal } = showModal(
-                            'Saving...',
-                            '',
-                            bb => []
-                        );
-                        for (const { tutorId, mod } of bookingsInfo) {
-                            const ask = await bookings.state.createRecord({
-                                id: -1,
-                                date: -1,
-                                tutor: tutorId,
-                                mod,
-                                request: requestId,
-                                status: 'unsent'
-                            });
-                            if (ask.status === AskStatus.ERROR) {
-                                throw ask.message;
-                            }
-                        }
-                        renavigate(['requests'], false);
-                        closeModal();
-                    } catch (err) {
-                        alertError(err);
-                    }
-                }
-            );
 
             table.setAllValues(
                 Object.values(bookings.state.getRecordCollectionOrFail())
@@ -622,8 +557,39 @@ function requestsNavigationScope(
             return container('<div></div>')(
                 header,
                 table.dom,
-                potentialTable.dom,
-                saveBookingsButton.dom
+                ButtonWidget('Edit bookings', () =>
+                    showModal('Edit bookings', potentialTable.dom, bb => [
+                        bb('Save', 'primary', async () => {
+                            try {
+                                const { closeModal } = showModal(
+                                    'Saving...',
+                                    '',
+                                    bb => []
+                                );
+                                for (const { tutorId, mod } of bookingsInfo) {
+                                    const ask = await bookings.state.createRecord(
+                                        {
+                                            id: -1,
+                                            date: -1,
+                                            tutor: tutorId,
+                                            mod,
+                                            request: requestId,
+                                            status: 'unsent'
+                                        }
+                                    );
+                                    if (ask.status === AskStatus.ERROR) {
+                                        throw ask.message;
+                                    }
+                                }
+                                closeModal();
+                                renavigate(['requests', requestId], false);
+                            } catch (err) {
+                                alertError(err);
+                            }
+                        }),
+                        bb('Cancel', 'secondary')
+                    ])
+                ).dom
             );
         },
         sidebar: container('<div>')(
