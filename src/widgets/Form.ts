@@ -12,11 +12,11 @@ export function FormWidget(fields: ResourceFieldInfo[]): FormWidget {
             const widget = type();
             widgets[name] = widget;
             return container('<div class="form-group row"></div>')(
-                container('<label class="col-2 col-form-label"></label>')(
+                container('<label class="col-5 col-form-label"></label>')(
                     container('<b></b>')(title),
-                    (info && container('<i class="ml-2"></i>')(info))
+                    info && container('<i class="ml-2"></i>')(info)
                 ),
-                container('<div class="col-10"></div>')(widget.dom)
+                container('<div class="col-7"></div>')(widget.dom)
             );
         })
     );

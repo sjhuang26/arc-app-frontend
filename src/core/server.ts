@@ -17,27 +17,30 @@ function failAfterFiveSeconds<T>(p: Promise<T>): Promise<T> {
     return new Promise((res, rej) => {
         setTimeout(
             () =>
-                rej(JSON.stringify({
-                    error: true,
-                    message: 'Server is not responding',
-                    val: null
-                })),
+                rej(
+                    JSON.stringify({
+                        error: true,
+                        message: 'Server is not responding',
+                        val: null
+                    })
+                ),
             5000
         );
         p.then(res);
     });
 }
 
-export function convertServerStringToAskFinished<T>(
-    str: any
-): AskFinished<T> {
+export function convertServerStringToAskFinished<T>(str: any): AskFinished<T> {
     try {
         if (typeof str !== 'string') {
             throw new Error('server response not in correct type');
         } else {
             try {
                 const response: ServerResponse<T> = JSON.parse(str);
-                if (typeof response !== 'object' || typeof response.error !== 'boolean') {
+                if (
+                    typeof response !== 'object' ||
+                    typeof response.error !== 'boolean'
+                ) {
                     throw new Error('server response not in correct type');
                 } else if (response.error) {
                     const v: AskError = {
@@ -236,22 +239,108 @@ class MockResourceServerEndpoint {
 
 export const mockResourceServerEndpoints = {
     tutors: new MockResourceServerEndpoint(() => tutors, {
+        '1561605140223': {
+            id: 1561605140223,
+            date: 1561267154650,
+            friendlyFullName: 'Jordan McCann',
+            friendlyName: 'Jordan',
+            firstName: 'Jordan',
+            lastName: 'McCann',
+            grade: 10,
+            studentId: 99999,
+            email: 'foobar@icloud.com',
+            phone: '5181234567',
+            contactPref: 'phone',
+            mods: [1, 2, 3, 6, 11, 12, 16],
+            modsPref: [3],
+            subjectList: 'English',
+            attendance: {},
+            dropInMods: [3]
+        }
     }),
     learners: new MockResourceServerEndpoint(() => learners, {
+        '1567531044346': {
+            id: 1567531044346,
+            date: 1567531044346,
+            friendlyFullName: 'Jeffrey Huang',
+            friendlyName: 'Jeffrey',
+            firstName: 'Jeffrey',
+            lastName: 'Huang',
+            grade: 0,
+            studentId: 8355,
+            email: 'asdfasdf@gmail.com',
+            phone: '555-555-5555',
+            contactPref: 'either',
+            attendance: {}
+        }
     }),
     bookings: new MockResourceServerEndpoint(() => bookings, {}),
     matchings: new MockResourceServerEndpoint(() => matchings, {}),
     requests: new MockResourceServerEndpoint(() => requests, {}),
     requestSubmissions: new MockResourceServerEndpoint(
-        () => requestSubmissions, {}
+        () => requestSubmissions,
+        {
+            '1567530880861': {
+                id: 1567530880861,
+                date: 1562007565571,
+                friendlyFullName: 'Jeffrey Huang',
+                friendlyName: 'Jeffrey',
+                firstName: 'Jeffrey',
+                lastName: 'Huang',
+                grade: 0,
+                studentId: 8355,
+                email: 'asdfasdf@gmail.com',
+                phone: '555-555-5555',
+                contactPref: 'either',
+                mods: [2, 17, 18],
+                subject: 'English',
+                specialRoom: '',
+                status: 'unchecked'
+            },
+            '1567530880981': {
+                id: 1567530880981,
+                date: 1562100813234,
+                friendlyFullName: 'Mary Jane',
+                friendlyName: 'Mary',
+                firstName: 'Mary',
+                lastName: 'Jane',
+                grade: 0,
+                studentId: 16234,
+                email: 's',
+                phone: 's',
+                contactPref: 'email',
+                mods: [1],
+                subject: 'Math',
+                specialRoom: '',
+                status: 'unchecked'
+            },
+            '1567530882754': {
+                id: 1567530882754,
+                date: 1562028050971,
+                friendlyFullName: 'John Doe',
+                friendlyName: 'John',
+                firstName: 'John',
+                lastName: 'Doe',
+                grade: 0,
+                studentId: 12345,
+                email: 'undefined',
+                phone: 'undefined',
+                contactPref: 'either',
+                mods: [16],
+                subject: 'all subjects',
+                specialRoom: 'B812',
+                status: 'unchecked'
+            }
+        }
     )
 };
 
-
-
 async function realServer(args: any[]): Promise<string> {
     function getGoogleAppsScriptEndpoint() {
-        if (window['google'] === undefined || window['google'].script === undefined) {
+        if (
+            window['google'] === undefined ||
+            window['google'].script === undefined
+        ) {
             // This will be displayed to the user
             throw 'You should turn on testing mode. Click OTHER >> TESTING MODE.';
         }
@@ -260,7 +349,10 @@ async function realServer(args: any[]): Promise<string> {
     let result: any = 'Mysterious error';
     try {
         result = await new Promise((res, rej) => {
-            getGoogleAppsScriptEndpoint().withFailureHandler(rej).withSuccessHandler(res).onClientAsk(args)
+            getGoogleAppsScriptEndpoint()
+                .withFailureHandler(rej)
+                .withSuccessHandler(res)
+                .onClientAsk(args);
         });
         // NOTE: an "error: true" response is still received by the client through withSuccessHandler().
     } catch (err) {
@@ -287,9 +379,11 @@ async function mockServer(args: any[]): Promise<any> {
     try {
         const mockArgs = JSON.parse(JSON.stringify(args));
 
-        result = JSON.stringify(await mockResourceServerEndpoints[mockArgs[0]].replyToClientAsk(
-            mockArgs.slice(1)
-        ));
+        result = JSON.stringify(
+            await mockResourceServerEndpoints[mockArgs[0]].replyToClientAsk(
+                mockArgs.slice(1)
+            )
+        );
     } catch (err) {
         result = JSON.stringify({
             error: true,

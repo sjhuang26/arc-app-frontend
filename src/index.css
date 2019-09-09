@@ -18,6 +18,8 @@ body {
 .app-sidebar {
     border-right: 5px solid #ddd;
 }
+.app-content-panel {
+}
 /*
 
 This is a series of aliases for flexbox layout.

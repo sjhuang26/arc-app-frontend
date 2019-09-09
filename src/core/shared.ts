@@ -312,7 +312,15 @@ export class Resource {
         return FormWidget(this.info.fields);
     }
 
-    createMarker(
+    createFriendlyMarker(
+        id: number,
+        builder: (record: Record) => string
+    ): JQuery {
+        // TODO
+        return this.createDataEditorMarker(id, builder);
+    }
+
+    createDataEditorMarker(
         id: number,
         builder: (record: Record) => string,
         onClick: () => void = () => this.makeTiledEditWindow(id)
@@ -734,7 +742,7 @@ const tutorsInfo: UnprocessedResourceInfo = {
     fieldNameMap,
     tableFieldTitles: ['Name', 'Grade', 'Mods', 'Subjects'],
     makeTableRowContent: record => [
-        tutors.createMarker(record.id, x => x.friendlyFullName),
+        tutors.createDataEditorMarker(record.id, x => x.friendlyFullName),
         record.grade,
         generateStringOfMods(record.mods, record.modsPref),
         record.subjectList
@@ -748,7 +756,7 @@ const learnersInfo: UnprocessedResourceInfo = {
     fieldNameMap,
     tableFieldTitles: ['Name', 'Grade'],
     makeTableRowContent: record => [
-        learners.createMarker(record.id, x => x.friendlyFullName),
+        learners.createDataEditorMarker(record.id, x => x.friendlyFullName),
         record.grade
     ],
     title: 'learner',
@@ -765,7 +773,10 @@ const requestsInfo: UnprocessedResourceInfo = {
     fieldNameMap,
     tableFieldTitles: ['Learner', 'Subject', 'Mods'],
     makeTableRowContent: record => [
-        learners.createMarker(record.learner, x => x.friendlyFullName),
+        learners.createDataEditorMarker(
+            record.learner,
+            x => x.friendlyFullName
+        ),
         record.subject,
         record.mods.join(', ')
     ],
@@ -807,11 +818,11 @@ const bookingsInfo: UnprocessedResourceInfo = {
     fieldNameMap,
     tableFieldTitles: ['Learner', 'Tutor', 'Mod', 'Status'],
     makeTableRowContent: record => [
-        learners.createMarker(
+        learners.createDataEditorMarker(
             requests.state.getRecordOrFail(record.request).learner,
             x => x.friendlyFullName
         ),
-        tutors.createMarker(record.tutor, x => x.friendlyFullName),
+        tutors.createDataEditorMarker(record.tutor, x => x.friendlyFullName),
         record.mod,
         record.status
     ],
@@ -843,8 +854,11 @@ const matchingsInfo: UnprocessedResourceInfo = {
     fieldNameMap,
     tableFieldTitles: ['Learner', 'Tutor', 'Mod', 'Subject', 'Status'],
     makeTableRowContent: record => [
-        learners.createMarker(record.learner, x => x.friendlyFullName),
-        tutors.createMarker(record.tutor, x => x.friendlyFullName),
+        learners.createDataEditorMarker(
+            record.learner,
+            x => x.friendlyFullName
+        ),
+        tutors.createDataEditorMarker(record.tutor, x => x.friendlyFullName),
         record.mod,
         record.subject,
         record.status

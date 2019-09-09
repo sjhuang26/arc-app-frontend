@@ -32,6 +32,32 @@ THIS IS LITERALLY JUST A BIG UTILITIES FILE FOR WIDGETS.
     };
 }*/
 
+export function ListGroupNavigationWidget<T>(
+    data: T[],
+    dataToContent: (item: T) => JQuery,
+    emptyUiMessage: string,
+    onRenavigation: (item: T, index: number) => void
+): Widget {
+    function renavigate(item: T, index: number) {
+        dom.children().removeClass('active');
+        dom.children()
+            .eq(index)
+            .addClass('active');
+        onRenavigation(item, index);
+    }
+
+    const dom = container('<ul class="list-group">')(
+        data.length === 0
+            ? container('<li class="list-group-item">')('No items')
+            : data.map((item, index) =>
+                  container('<li class="list-group-item">')(
+                      dataToContent(item)
+                  ).click(() => renavigate(item, index))
+              )
+    );
+    return DomWidget(dom);
+}
+
 export function addPopoverToDom(dom: JQuery, popoverDom: JQuery): void {
     dom.popover({
         content: container('<span>')(...popoverDom.toArray())[0]
