@@ -219,6 +219,23 @@ class MockResourceServerEndpoint {
             onClientNotification(['delete', this.resource().name, args[1]]);
             return this.success(null);
         }
+        if (args[0] === 'command') {
+            if (args[1] === 'syncDataFromForms') {
+                throw new Error(
+                    'command syncDataFromForms is not supported on the testing server'
+                );
+            }
+            if (args[1] === 'recalculateAttendance') {
+                throw new Error(
+                    'command recalculateAttendance is not supported on the testing server'
+                );
+            }
+            if (args[1] === 'generateSchedule') {
+                throw new Error(
+                    'command generateSchedule is not supported on the testing server'
+                );
+            }
+        }
         throw new Error('args not matched');
     }
 

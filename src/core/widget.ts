@@ -24,7 +24,7 @@ import {
     ListGroupNavigationWidget
 } from '../widgets/ui';
 import { TableWidget } from '../widgets/Table';
-import { AskStatus, getResultOrFail } from './server';
+import { AskStatus, getResultOrFail, askServer } from './server';
 
 /*
 
@@ -44,6 +44,14 @@ async function isOperationConfirmedByUser(args: {}): Promise<boolean> {
 
 const navigationBarString = `
 <ul class="nav nav-pills">
+    <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle" data-toggle="dropdown">Commands</a>
+        <div class="dropdown-menu dropdown-menu-right">
+            <a class="dropdown-item">Sync data from forms</a>
+            <a class="dropdown-item">Generate schedule</a>
+            <a class="dropdown-item">Recalculate attendance</a>
+        </div>
+    </li>
     <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle" data-toggle="dropdown">Advanced data editor</a>
         <div class="dropdown-menu dropdown-menu-right">
@@ -1163,6 +1171,32 @@ export function rootWidget(): Widget {
         dom.find('a')
             .css('cursor', 'pointer')
             .click(ev => {
+                function command(
+                    name: string,
+                    textName: string,
+                    loadingMessage: string,
+                    finish: (result: any) => Promise<void>
+                ) {
+                    if (text == textName) {
+                        (async () => {
+                            const { closeModal } = showModal(
+                                loadingMessage,
+                                '',
+                                bb => []
+                            );
+                            try {
+                                const result = getResultOrFail(
+                                    await askServer(['command', name])
+                                );
+                                await finish(result);
+                            } catch (e) {
+                                alertError(e);
+                            } finally {
+                                closeModal();
+                            }
+                        })();
+                    }
+                }
                 ev.preventDefault();
                 const text = $(ev.target).text();
 
@@ -1191,6 +1225,46 @@ export function rootWidget(): Widget {
                 if (text == 'Attendance') {
                     renavigate(['attendance'], false);
                 }
+
+                // COMMANDS
+                command(
+                    'syncDataFromForms',
+                    'Sync data from forms',
+                    'Syncing data...',
+                    async (result: any) => {
+                        showModal(
+                            'Sync successful',
+                            `${result as number} new form submissions found`,
+                            bb => [bb('OK', 'primary')]
+                        );
+                    }
+                );
+
+                command(
+                    'generateSchedule',
+                    'Generate schedule',
+                    'Generating schedule...',
+                    async (result: any) => {
+                        showModal(
+                            'Schedule successfully generated',
+                            `The schedule in the spreadsheet has been updated`,
+                            bb => [bb('OK', 'primary')]
+                        );
+                    }
+                );
+
+                command(
+                    'recalculateAttendance',
+                    'Recalculate attendance',
+                    'Recalculating attendance...',
+                    async (result: any) => {
+                        showModal(
+                            'Attendance successfully recalculated',
+                            '',
+                            bb => [bb('OK', 'primary')]
+                        );
+                    }
+                );
 
                 // MISC
                 if (text == 'About') {
