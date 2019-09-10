@@ -689,7 +689,9 @@ export function makeBasicStudentConfig(): [string, FormFieldType][] {
                 ['email', 'phone', 'either'],
                 ['Email', 'Phone', 'Either']
             )
-        ]
+        ],
+        ['homeroom', StringField('text')],
+        ['homeroomTeacher', StringField('text')]
     ];
 }
 
@@ -738,7 +740,16 @@ const fieldNameMap: FieldNameMap = {
         `Leave blank if the student isn't in special tutoring`
     ],
     id: ['ID', `Do not modify unless you really know what you're doing!`],
-    date: ['Date', 'Date of creation -- do not change']
+    date: ['Date', 'Date of creation -- do not change'],
+    homeroom: 'Homeroom',
+    homeroomTeacher: 'Homeroom teacher',
+    step: 'Step',
+    afterSchoolAvailability: 'After-school availability',
+    attendanceAnnotation: 'Attendance annotation',
+    additionalHours: [
+        'Additional hours',
+        'Additional time added to the hours count'
+    ]
 };
 
 /*
@@ -754,7 +765,10 @@ const tutorsInfo: UnprocessedResourceInfo = {
         ['modsPref', NumberArrayField('number')],
         ['subjectList', StringField('text')],
         ['attendance', JsonField({})],
-        ['dropInMods', NumberArrayField('number')]
+        ['dropInMods', NumberArrayField('number')],
+        ['afterSchoolAvailability', StringField('text')],
+        ['attendanceAnnotation', StringField('text')],
+        ['additionalHours', StringField('text')]
     ],
     fieldNameMap,
     tableFieldTitles: ['Name', 'Grade', 'Mods', 'Subjects'],
@@ -785,7 +799,8 @@ const requestsInfo: UnprocessedResourceInfo = {
         ['learner', NumberField('id')],
         ['mods', NumberArrayField('number')],
         ['subject', StringField('text')],
-        ['specialRoom', StringField('text')]
+        ['specialRoom', StringField('text')],
+        ['step', NumberField('number')]
     ],
     fieldNameMap,
     tableFieldTitles: ['Learner', 'Subject', 'Mods'],
@@ -811,8 +826,8 @@ const bookingsInfo: UnprocessedResourceInfo = {
         [
             'status',
             SelectField(
-                ['unsent', 'waitingForTutor', 'rejected'],
-                ['Unsent', 'Waiting', 'Rejected']
+                ['ignored', 'unsent', 'waitingForTutor', 'rejected'],
+                ['Ignored', 'Unsent', 'Waiting', 'Rejected']
             )
         ]
     ],
@@ -843,13 +858,6 @@ const matchingsInfo: UnprocessedResourceInfo = {
         ['tutor', StringField('text')],
         ['subject', StringField('text')],
         ['mod', NumberField('number')],
-        [
-            'status',
-            SelectField(
-                ['unwritten', 'unsent', 'finalized'],
-                ['Unwritten', 'Unsent', 'Finalized']
-            )
-        ],
         ['specialRoom', StringField('text')]
     ],
     fieldNameMap,
