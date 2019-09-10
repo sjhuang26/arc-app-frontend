@@ -219,23 +219,6 @@ class MockResourceServerEndpoint {
             onClientNotification(['delete', this.resource().name, args[1]]);
             return this.success(null);
         }
-        if (args[0] === 'command') {
-            if (args[1] === 'syncDataFromForms') {
-                throw new Error(
-                    'command syncDataFromForms is not supported on the testing server'
-                );
-            }
-            if (args[1] === 'recalculateAttendance') {
-                throw new Error(
-                    'command recalculateAttendance is not supported on the testing server'
-                );
-            }
-            if (args[1] === 'generateSchedule') {
-                throw new Error(
-                    'command generateSchedule is not supported on the testing server'
-                );
-            }
-        }
         throw new Error('args not matched');
     }
 
@@ -247,7 +230,7 @@ class MockResourceServerEndpoint {
                 } catch (v) {
                     rej(v);
                 }
-            }, 500); // fake a half-second delay
+            }, 100); // fake a small delay
         });
     }
 }
@@ -406,6 +389,26 @@ async function mockServer(args: any[]): Promise<any> {
     try {
         const mockArgs = JSON.parse(JSON.stringify(args));
 
+        if (args[0] === 'command') {
+            if (args[1] === 'syncDataFromForms') {
+                throw new Error(
+                    'command syncDataFromForms is not supported on the testing server'
+                );
+            }
+            if (args[1] === 'recalculateAttendance') {
+                throw new Error(
+                    'command recalculateAttendance is not supported on the testing server'
+                );
+            }
+            if (args[1] === 'generateSchedule') {
+                throw new Error(
+                    'command generateSchedule is not supported on the testing server'
+                );
+            }
+            throw new Error(
+                'command [unknown] is not supported on the testing server'
+            );
+        }
         result = JSON.stringify(
             await mockResourceServerEndpoints[mockArgs[0]].replyToClientAsk(
                 mockArgs.slice(1)

@@ -743,7 +743,8 @@ const fieldNameMap: FieldNameMap = {
     date: ['Date', 'Date of creation -- do not change'],
     homeroom: 'Homeroom',
     homeroomTeacher: 'Homeroom teacher',
-    step: 'Step',
+    step: ['Step', 'A number 1-4.'],
+    chosenBooking: ['Chosen booking', 'The ID of the booking that was chosen'],
     afterSchoolAvailability: 'After-school availability',
     attendanceAnnotation: 'Attendance annotation',
     additionalHours: [
@@ -800,7 +801,8 @@ const requestsInfo: UnprocessedResourceInfo = {
         ['mods', NumberArrayField('number')],
         ['subject', StringField('text')],
         ['specialRoom', StringField('text')],
-        ['step', NumberField('number')]
+        ['step', NumberField('number')],
+        ['chosenBooking', NumberField('id')]
     ],
     fieldNameMap,
     tableFieldTitles: ['Learner', 'Subject', 'Mods'],
@@ -826,8 +828,8 @@ const bookingsInfo: UnprocessedResourceInfo = {
         [
             'status',
             SelectField(
-                ['ignored', 'unsent', 'waitingForTutor', 'rejected'],
-                ['Ignored', 'Unsent', 'Waiting', 'Rejected']
+                ['ignore', 'unsent', 'waitingForTutor', 'rejected'],
+                ['Ignore', 'Unsent', 'Waiting', 'Rejected']
             )
         ]
     ],
