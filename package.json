@@ -1,21 +1,22 @@
 {
-    "scripts": {
-        "parcel-serve": "parcel ./src/index.html --log-level 4 --no-hmr --no-cache",
-        "parcel-build": "parcel build ./src/index.html --log-level 4 --no-cache --no-minify",
-        "parcel-build-nomap": "parcel build ./src/index.html --log-level 4 --no-cache --no-minify --no-source-maps"
-    },
-    "dependencies": {
-        "@types/bootstrap": "^4.3.0",
-        "@types/jquery": "^3.3.29",
-        "parcel-bundler": "^1.12.3",
-        "prettier": "^1.18.2"
-    },
-    "devDependencies": {
-        "babel-core": "^6.26.3",
-        "babel-preset-env": "^1.7.0",
-        "typescript": "^3.5.2"
-    },
-    "browserslist": [
-        "last 1 Chrome version"
-    ]
+  "scripts": {
+    "parcel-serve": "parcel ./src/index.html --log-level 4 --no-hmr --no-cache",
+    "parcel-build": "parcel build ./src/index.html --log-level 4 --no-cache --no-minify",
+    "parcel-build-nomap": "parcel build ./src/index.html --log-level 4 --no-cache --no-minify --no-source-maps",
+    "prettier-lint": "prettier --write --loglevel debug --config .prettierrc src/**/*.{ts,css,html}"
+  },
+  "dependencies": {
+    "@types/bootstrap": "^4.3.0",
+    "@types/jquery": "^3.3.29",
+    "parcel-bundler": "^1.12.3",
+    "prettier": "^1.18.2"
+  },
+  "devDependencies": {
+    "babel-core": "^6.26.3",
+    "babel-preset-env": "^1.7.0",
+    "typescript": "^3.5.2"
+  },
+  "browserslist": [
+    "last 1 Chrome version"
+  ]
 }
