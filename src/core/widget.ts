@@ -1157,14 +1157,20 @@ function attendanceNavigationScope(
     ({ isLearner, student }: { isLearner: boolean; student: Record }) => {
       // calculate the attendance level & totals
       let numPresent = 0
+      let numExcused = 0
       let numAbsent = 0
       let totalMinutes = 0
+      if (student.additionalHours !== undefined) {
+        totalMinutes += student.additionalHours
+      }
       for (const x of Object.values<any>(student.attendance)) {
         for (const { minutes } of x) {
-          if (minutes > 0) {
-            ++numPresent
-          } else {
+          if (minutes === 1) {
+            ++numExcused
+          } else if (minutes <= 0) {
             ++numAbsent
+          } else {
+            ++numPresent
           }
           totalMinutes += minutes
         }
@@ -1175,7 +1181,7 @@ function attendanceNavigationScope(
           x => x.friendlyFullName
         ),
         String(totalMinutes),
-        `${numPresent}P / ${numAbsent}A`,
+        `${numPresent}P / ${numExcused} / ${numAbsent}A`,
         ButtonWidget("Details", () => {
           renavigate(["attendance", student.id], true)
         }).dom
@@ -1441,7 +1447,8 @@ export function rootWidget(): Widget {
             const { closeModal } = showModal(
               "Loading force refresh...",
               "",
-              bb => []
+              bb => [],
+              true
             )
             await tutors.state.forceRefresh()
             await learners.state.forceRefresh()
