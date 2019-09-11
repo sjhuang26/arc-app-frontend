@@ -1,22 +1,22 @@
 html {
-    height: 100%;
-    display: flex;
-    flex-flow: column;
+  height: 100%;
+  display: flex;
+  flex-flow: column;
 }
 body {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-flow: column;
-    justify-content: center;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-flow: column;
+  justify-content: center;
 }
 #app {
-    flex: 1;
-    min-height: 0;
+  flex: 1;
+  min-height: 0;
 }
 
 .app-sidebar {
-    border-right: 5px solid #ddd;
+  border-right: 5px solid #ddd;
 }
 .app-content-panel {
 }
@@ -33,29 +33,29 @@ What this layout system does:
 */
 
 .layout-h {
-    display: flex;
-    flex-flow: row;
-    justify-content: center;
+  display: flex;
+  flex-flow: row;
+  justify-content: center;
 }
 .layout-h > * {
-    flex: 1;
-    min-width: 0;
+  flex: 1;
+  min-width: 0;
 }
 .layout-v {
-    display: flex;
-    flex-flow: column;
-    justify-content: center;
+  display: flex;
+  flex-flow: column;
+  justify-content: center;
 }
 .layout-v > * {
-    flex: 1;
-    min-height: 0;
+  flex: 1;
+  min-height: 0;
 }
 .layout-item-fit {
-    flex: 0 1 auto;
+  flex: 0 1 auto;
 }
 .layout-item-scroll {
-    overflow: auto;
+  overflow: auto;
 }
 .layout-item-fixedscroll {
-    overflow: scroll;
+  overflow: scroll;
 }
