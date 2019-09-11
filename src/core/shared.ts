@@ -321,10 +321,11 @@ export class Resource {
 
     createFriendlyMarker(
         id: number,
-        builder: (record: Record) => string
+        builder: (record: Record) => string,
+        onClick?: () => void
     ): JQuery {
         // TODO
-        return this.createDataEditorMarker(id, builder);
+        return this.createDataEditorMarker(id, builder, onClick);
     }
 
     createDataEditorMarker(

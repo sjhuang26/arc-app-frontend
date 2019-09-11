@@ -185,7 +185,7 @@ function showStep1Messager(bookingId: number) {
 }
 
 async function requestChangeToStep4(requestId: number, onFinish: () => void) {
-    const { closeModal } = showModal('Saving...', '', bb => []);
+    const { closeModal } = showModal('Saving...', '', bb => [], true);
     try {
         const r = requests.state.getRecordOrFail(requestId);
         const b = bookings.state.getRecordOrFail(r.chosenBooking);
@@ -220,7 +220,7 @@ async function requestChangeToStep4(requestId: number, onFinish: () => void) {
 }
 
 async function requestChangeToStep3(requestId: number, onFinish: () => void) {
-    const { closeModal } = showModal('Saving...', '', bb => []);
+    const { closeModal } = showModal('Saving...', '', bb => [], true);
     try {
         const r = requests.state.getRecordOrFail(requestId);
         r.step = 3;
@@ -243,7 +243,7 @@ async function requestChangeToStep2(
             'Are you sure you want to match these students?'
         )
     ) {
-        const { closeModal } = showModal('Saving...', '', bb => []);
+        const { closeModal } = showModal('Saving...', '', bb => [], true);
         try {
             const r = requests.state.getRecordOrFail(requestId);
             // "choose" the booking
@@ -486,7 +486,12 @@ function requestsNavigationScope(
     }
     function buildRSButton(): JQuery {
         return ButtonWidget('Convert new request submissions', async () => {
-            const { closeModal } = showModal('Converting...', '', bb => []);
+            const { closeModal } = showModal(
+                'Converting...',
+                '',
+                bb => [],
+                true
+            );
             try {
                 for (const record of uncheckedRequestSubmissions) {
                     await attemptRequestSubmissionConversion(record);
@@ -736,7 +741,10 @@ function requestsNavigationScope(
     };
 }
 
-function scheduleEditNavigationScope(): NavigationScope {
+function scheduleEditNavigationScope(
+    renavigate: (newNavigationState: any[], keepScope: boolean) => void
+): NavigationScope {
+    // LOAD RECORD COLLECTIONS
     const bookingRecords = bookings.state.getRecordCollectionOrFail();
     const matchingRecords = matchings.state.getRecordCollectionOrFail();
     const tutorRecords = tutors.state.getRecordCollectionOrFail();
@@ -754,7 +762,7 @@ function scheduleEditNavigationScope(): NavigationScope {
 
     // ON SAVE, COMPARE THE TWO INDEXES
     async function onSave() {
-        const { closeModal } = showModal('Saving...', '', bb => []);
+        const { closeModal } = showModal('Saving...', '', bb => [], true);
         try {
             let wereChanges = false;
             for (const [idString, oldDropInMods] of Object.entries(
@@ -789,312 +797,413 @@ function scheduleEditNavigationScope(): NavigationScope {
             closeModal();
         }
     }
-    function generateMainContentPanel() {
-        // INIT DOM
-        const availableDom = container('<div>')();
-        for (let i = 0; i < 20; ++i) {
-            availableDom.append(
-                container('<div>')(
-                    $('<p><strong></strong></p>').text(`Mod ${i + 1}`),
-                    container('<ul class="list-group">')()
-                )
-            );
-        }
-        const scheduleDom = container('<div>')();
-        for (let i = 0; i < 20; ++i) {
-            scheduleDom.append(
-                container('<div>')(
-                    $('<p><strong></strong></p>').text(`Mod ${i + 1}`),
-                    container('<ul class="list-group">')()
-                )
-            );
-        }
 
-        // CREATE INDEX OF TUTORS --> [ STATUS, STATUS, STATUS ... ] for each mod
-        const tutorModStatusIndex: {
-            [id: number]: {
-                id: number;
-                modStatus: (string | (string | number)[])[];
-            };
-        } = {};
-        for (const tutor of Object.values(tutorRecords)) {
-            tutorModStatusIndex[tutor.id] = {
-                id: tutor.id,
-                modStatus: []
-            };
-            for (let i = 0; i < 20; ++i) {
-                tutorModStatusIndex[tutor.id].modStatus.push('none');
-            }
-            // mod status: available
-            for (const mod of tutor.mods) {
-                tutorModStatusIndex[tutor.id].modStatus[mod - 1] = 'available';
-            }
-            // mod status: drop-in
-            for (const mod of tutor.dropInMods) {
-                if (
-                    tutorModStatusIndex[tutor.id].modStatus[mod - 1] ===
-                    'available'
-                ) {
-                    tutorModStatusIndex[tutor.id].modStatus[mod - 1] = 'dropIn';
-                }
-            }
-            // preferred mods
-            for (const mod of tutor.modsPref) {
-                tutorModStatusIndex[tutor.id].modStatus[mod - 1] += 'Pref';
+    // INIT DOM
+    const availableDomA = container('<div>')();
+    const availableDomB = container('<div>')();
+    for (let i = 0; i < 10; ++i) {
+        availableDomA.append(
+            container('<div>')(
+                $('<p class="lead"><strong></strong></p>').text(`Mod ${i + 1}`),
+                container('<ul class="list-group">')()
+            )
+        );
+    }
+    for (let i = 0; i < 10; ++i) {
+        availableDomB.append(
+            container('<div>')(
+                $('<p class="lead"><strong></strong></p>').text(
+                    `Mod ${i + 11}`
+                ),
+                container('<ul class="list-group">')()
+            )
+        );
+    }
+    const scheduleDomA = container('<div>')();
+    const scheduleDomB = container('<div>')();
+    for (let i = 0; i < 10; ++i) {
+        scheduleDomA.append(
+            container('<div>')(
+                $('<p class="lead"><strong></strong></p>').text(`Mod ${i + 1}`),
+                container('<ul class="list-group">')()
+            )
+        );
+    }
+    for (let i = 0; i < 10; ++i) {
+        scheduleDomB.append(
+            container('<div>')(
+                $('<p class="lead"><strong></strong></p>').text(
+                    `Mod ${i + 11}`
+                ),
+                container('<ul class="list-group">')()
+            )
+        );
+    }
+
+    // CREATE INDEX OF TUTORS --> [ STATUS, STATUS, STATUS ... ] for each mod
+    const tutorModStatusIndex: {
+        [id: number]: {
+            id: number;
+            modStatus: (string | (string | number)[])[];
+        };
+    } = {};
+    for (const tutor of Object.values(tutorRecords)) {
+        tutorModStatusIndex[tutor.id] = {
+            id: tutor.id,
+            modStatus: []
+        };
+        for (let i = 0; i < 20; ++i) {
+            tutorModStatusIndex[tutor.id].modStatus.push('none');
+        }
+        // mod status: available
+        for (const mod of tutor.mods) {
+            tutorModStatusIndex[tutor.id].modStatus[mod - 1] = 'available';
+        }
+        // mod status: drop-in
+        for (const mod of tutor.dropInMods) {
+            if (
+                tutorModStatusIndex[tutor.id].modStatus[mod - 1] === 'available'
+            ) {
+                tutorModStatusIndex[tutor.id].modStatus[mod - 1] = 'dropIn';
             }
         }
-        for (const booking of Object.values(bookingRecords)) {
-            if (booking.status !== 'ignore' && booking.status !== 'rejected') {
-                tutorModStatusIndex[booking.tutor].modStatus[
-                    booking.mod - 1
-                ] = ['booked', booking.id];
-            }
+        // preferred mods
+        for (const mod of tutor.modsPref) {
+            tutorModStatusIndex[tutor.id].modStatus[mod - 1] += 'Pref';
         }
-        for (const matching of Object.values(matchingRecords)) {
-            tutorModStatusIndex[matching.tutor].modStatus[matching.mod - 1] = [
-                'matched',
-                matching.id
+    }
+    for (const booking of Object.values(bookingRecords)) {
+        if (booking.status !== 'ignore' && booking.status !== 'rejected') {
+            tutorModStatusIndex[booking.tutor].modStatus[booking.mod - 1] = [
+                'booked',
+                booking.id
             ];
         }
-        function generatePopupAvailable(id: number, mod: number) {
-            const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1];
-            if (typeof initialStatus !== 'string') {
-                throw new Error('typecheck failed in generatePopupSchedule');
-            }
-            const element = container(
-                '<li class="list-group-item list-group-item-action">'
-            )(
-                tutors.createLabel(id, x => x.friendlyFullName),
-                initialStatus.endsWith('Pref') ? ' (preferred)' : ''
-            );
-            availableDom
+    }
+    for (const matching of Object.values(matchingRecords)) {
+        tutorModStatusIndex[matching.tutor].modStatus[matching.mod - 1] = [
+            'matched',
+            matching.id
+        ];
+    }
+    function generatePopupAvailable(id: number, mod: number) {
+        const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1];
+        if (typeof initialStatus !== 'string') {
+            throw new Error('typecheck failed in generatePopupSchedule');
+        }
+        const element = container(
+            '<li class="list-group-item list-group-item-action">'
+        )(
+            tutors.createLabel(id, x => x.friendlyFullName),
+            initialStatus.endsWith('Pref') ? '*' : ''
+        );
+        if (initialStatus.endsWith('Pref')) {
+            element.addClass('text-primary');
+        }
+        if (mod < 10) {
+            availableDomA
                 .children()
                 .eq(mod - 1)
                 .children()
                 .eq(1)
                 .append(element);
-            const contentDom = container('<span>')('Actions:');
-            for (let i = 0; i < 20; ++i) {
-                // if (i + 1 === mod) continue;
-                const status = tutorModStatusIndex[id].modStatus[i];
-                if (
-                    typeof status !== 'string' ||
-                    !status.startsWith('available')
-                )
-                    continue;
-                contentDom.append(
-                    ButtonWidget(
-                        String(i + 1) + (status === 'availablePref' ? '*' : ''),
-                        () => {
-                            const arr = editedDropInModsIndex[id];
-                            // add the new mod
-                            arr.push(i + 1);
-                            // sort
-                            arr.sort();
-                            // edit status index
-                            tutorModStatusIndex[id].modStatus[i] =
-                                tutorModStatusIndex[id].modStatus[i] ===
-                                'availablePref'
-                                    ? 'dropInPref'
-                                    : 'dropIn';
-                            // hide popover
-                            element.popover('hide');
-                            // rebind data handler
-                            generatePopupSchedule(id, i + 1);
-                        }
-                    ).dom
-                );
-            }
-            element.popover({
-                content: contentDom[0],
-                placement: 'auto',
-                html: true,
-                trigger: 'click'
-            });
-        }
-        function generatePopupSchedule(id: number, mod: number) {
-            console.log(tutorModStatusIndex);
-            const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1];
-            if (typeof initialStatus !== 'string') {
-                throw new Error('typecheck failed in generatePopupSchedule');
-            }
-            const element = container(
-                '<li class="list-group-item list-group-item-action">'
-            )(
-                tutors.createLabel(id, x => x.friendlyFullName),
-                ' (drop-in)',
-                initialStatus.endsWith('Pref') ? ' (preferred)' : ''
-            );
-            scheduleDom
+        } else {
+            availableDomB
                 .children()
-                .eq(mod - 1)
-                .children()
-                .eq(1)
-                .append(element);
-
-            const contentDom = container('<span>')('Actions:');
-            for (let i = 0; i < 20; ++i) {
-                if (i + 1 === mod) continue;
-                const status = tutorModStatusIndex[id].modStatus[i];
-                if (
-                    typeof status !== 'string' ||
-                    !status.startsWith('available')
-                )
-                    continue;
-                contentDom.append(
-                    ButtonWidget(
-                        String(i + 1) + (status === 'availablePref' ? '*' : ''),
-                        () => {
-                            // remove the mod
-                            const arr = editedDropInModsIndex[id];
-                            arr.splice(arr.indexOf(mod), 1);
-                            // add the mod
-                            arr.push(i + 1);
-                            // sort
-                            arr.sort();
-                            // edit status index
-                            tutorModStatusIndex[id].modStatus[mod - 1] =
-                                tutorModStatusIndex[id].modStatus[mod - 1] ===
-                                'dropInPref'
-                                    ? 'availablePref'
-                                    : 'available';
-                            tutorModStatusIndex[id].modStatus[i] =
-                                tutorModStatusIndex[id].modStatus[i] ===
-                                'availablePref'
-                                    ? 'dropInPref'
-                                    : 'dropIn';
-                            // dispose popover
-                            element.popover('dispose');
-                            // destroy element
-                            element.remove();
-                            // recreate popup
-                            generatePopupSchedule(id, i + 1);
-                        }
-                    ).dom
-                );
-            }
-            contentDom.append(
-                ButtonWidget('X', () => {
-                    // remove the mod entirely
-                    const arr = editedDropInModsIndex[id];
-                    arr.splice(arr.indexOf(mod), 1);
-                    // sort
-                    arr.sort();
-                    // edit status index
-                    tutorModStatusIndex[id].modStatus[mod - 1] =
-                        tutorModStatusIndex[id].modStatus[mod - 1] ===
-                        'dropInPref'
-                            ? 'availablePref'
-                            : 'available';
-                    // detach element
-                    element.detach();
-                    // dispose popover
-                    element.popover('dispose');
-                }).dom
-            );
-            element.popover({
-                content: contentDom[0],
-                placement: 'auto',
-                html: true,
-                trigger: 'click'
-            });
-        }
-        function generatePopupScheduleMatch(id: number, mod: number) {
-            const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1];
-            if (!Array.isArray(initialStatus)) {
-                throw new Error(
-                    'typecheck failed in generatePopupScheduleMatch'
-                );
-            }
-            const matchingId = initialStatus[1] as number;
-            const element = container(
-                '<li class="text-danger list-group-item">'
-            )(
-                matchings.createLabel(
-                    matchingId,
-                    x =>
-                        tutors.createLabel(x.tutor, y => y.friendlyFullName) +
-                        ' (matched)'
-                )
-            );
-            scheduleDom
-                .children()
-                .eq(mod - 1)
-                .children()
-                .eq(1)
-                .append(element);
-            const contentDom = container('<span>')('Details:');
-            contentDom.append(
-                matchings.createDomLabel(matchingId, x =>
-                    container('<span>')(
-                        tutors.createFriendlyMarker(
-                            x.tutor,
-                            y => y.friendlyFullName
-                        ),
-                        ' <> ',
-                        learners.createFriendlyMarker(
-                            x.learner,
-                            y => y.friendlyFullName
-                        )
-                    )
-                )
-            );
-            element.popover({
-                content: contentDom[0],
-                placement: 'auto',
-                html: true,
-                trigger: 'click'
-            });
-        }
-        function generatePopupScheduleBook(id: number, mod: number) {
-            const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1];
-            if (!Array.isArray(initialStatus)) {
-                throw new Error(
-                    'typecheck failed in generatePopupScheduleBook'
-                );
-            }
-            const element = container(
-                '<li class="text-danger list-group-item">'
-            )(tutors.createLabel(id, x => x.friendlyFullName), ' (booked)');
-            scheduleDom
-                .children()
-                .eq(mod - 1)
+                .eq(mod - 11)
                 .children()
                 .eq(1)
                 .append(element);
         }
-
-        for (const { id, modStatus } of Object.values(tutorModStatusIndex)) {
-            for (let i = 0; i < 20; ++i) {
-                const status = modStatus[i];
-                if (Array.isArray(status)) {
-                    if (status[0] === 'matched') {
-                        generatePopupScheduleMatch(id, i + 1);
-                    }
-                    if (status[0] === 'booked') {
-                        generatePopupScheduleBook(id, i + 1);
-                    }
-                }
-                if (typeof status === 'string') {
-                    if (status.startsWith('dropIn')) {
-                        generatePopupAvailable(id, i + 1);
+        const buttons = container('<div class="btn-group m-2">')();
+        for (let i = 0; i < 20; ++i) {
+            const status = tutorModStatusIndex[id].modStatus[i];
+            if (typeof status !== 'string' || !status.startsWith('available'))
+                continue;
+            buttons.append(
+                ButtonWidget(
+                    String(i + 1) + (status === 'availablePref' ? '*' : ''),
+                    () => {
+                        const arr = editedDropInModsIndex[id];
+                        // add the new mod
+                        arr.push(i + 1);
+                        // sort
+                        arr.sort();
+                        // edit status index
+                        tutorModStatusIndex[id].modStatus[i] =
+                            tutorModStatusIndex[id].modStatus[i] ===
+                            'availablePref'
+                                ? 'dropInPref'
+                                : 'dropIn';
+                        // hide popover
+                        element.popover('hide');
+                        // rebind data handler
                         generatePopupSchedule(id, i + 1);
                     }
-                    if (status.startsWith('available')) {
-                        generatePopupAvailable(id, i + 1);
+                ).dom
+            );
+        }
+        element.popover({
+            content: buttons[0],
+            placement: 'auto',
+            html: true,
+            trigger: 'click'
+        });
+    }
+    function generatePopupSchedule(id: number, mod: number) {
+        console.log(tutorModStatusIndex);
+        const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1];
+        if (typeof initialStatus !== 'string') {
+            throw new Error('typecheck failed in generatePopupSchedule');
+        }
+        const element = container(
+            '<li class="list-group-item list-group-item-action">'
+        )(
+            tutors.createLabel(id, x => x.friendlyFullName),
+            initialStatus.endsWith('Pref') ? '*' : ''
+        );
+        if (initialStatus.endsWith('Pref')) {
+            element.addClass('text-primary');
+        }
+        if (mod < 10) {
+            scheduleDomA
+                .children()
+                .eq(mod - 1)
+                .children()
+                .eq(1)
+                .append(element);
+        } else {
+            scheduleDomB
+                .children()
+                .eq(mod - 11)
+                .children()
+                .eq(1)
+                .append(element);
+        }
+
+        const buttons = container('<div class="btn-group m-2">')();
+        for (let i = 0; i < 20; ++i) {
+            const status = tutorModStatusIndex[id].modStatus[i];
+            if (typeof status !== 'string' || !status.startsWith('available'))
+                continue;
+            buttons.append(
+                ButtonWidget(
+                    String(i + 1) + (status === 'availablePref' ? '*' : ''),
+                    () => {
+                        // remove the mod
+                        const arr = editedDropInModsIndex[id];
+                        arr.splice(arr.indexOf(mod), 1);
+                        // add the mod
+                        arr.push(i + 1);
+                        // sort
+                        arr.sort();
+                        // edit status index
+                        tutorModStatusIndex[id].modStatus[mod - 1] =
+                            tutorModStatusIndex[id].modStatus[mod - 1] ===
+                            'dropInPref'
+                                ? 'availablePref'
+                                : 'available';
+                        tutorModStatusIndex[id].modStatus[i] =
+                            tutorModStatusIndex[id].modStatus[i] ===
+                            'availablePref'
+                                ? 'dropInPref'
+                                : 'dropIn';
+                        // dispose popover
+                        element.popover('dispose');
+                        // destroy element
+                        element.remove();
+                        // recreate popup
+                        generatePopupSchedule(id, i + 1);
                     }
+                ).dom
+            );
+        }
+        buttons.append(
+            ButtonWidget('X', () => {
+                // remove the mod entirely
+                const arr = editedDropInModsIndex[id];
+                arr.splice(arr.indexOf(mod), 1);
+                // sort
+                arr.sort();
+                // edit status index
+                tutorModStatusIndex[id].modStatus[mod - 1] =
+                    tutorModStatusIndex[id].modStatus[mod - 1] === 'dropInPref'
+                        ? 'availablePref'
+                        : 'available';
+                // detach element
+                element.detach();
+                // dispose popover
+                element.popover('dispose');
+            }).dom
+        );
+        element.popover({
+            content: buttons[0],
+            placement: 'auto',
+            html: true,
+            trigger: 'click'
+        });
+    }
+    function generatePopupScheduleMatch(id: number, mod: number) {
+        const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1];
+        if (!Array.isArray(initialStatus)) {
+            throw new Error('typecheck failed in generatePopupScheduleMatch');
+        }
+        const matchingId = initialStatus[1] as number;
+        const element = container('<li class="text-danger list-group-item">')(
+            matchings.createLabel(
+                matchingId,
+                x =>
+                    tutors.createLabel(x.tutor, y => y.friendlyFullName) +
+                    ' (matched)'
+            )
+        );
+        if (mod < 10) {
+            scheduleDomA
+                .children()
+                .eq(mod - 1)
+                .children()
+                .eq(1)
+                .append(element);
+        } else {
+            scheduleDomB
+                .children()
+                .eq(mod - 11)
+                .children()
+                .eq(1)
+                .append(element);
+        }
+        const contentDom = container('<span>')('Details:');
+        contentDom.append(
+            matchings.createDomLabel(matchingId, x =>
+                container('<span>')(
+                    tutors.createFriendlyMarker(
+                        x.tutor,
+                        y => y.friendlyFullName
+                    ),
+                    ' <> ',
+                    learners.createFriendlyMarker(
+                        x.learner,
+                        y => y.friendlyFullName
+                    )
+                )
+            )
+        );
+        element.popover({
+            content: contentDom[0],
+            placement: 'auto',
+            html: true,
+            trigger: 'click'
+        });
+    }
+    function generatePopupScheduleBook(
+        id: number,
+        mod: number,
+        bookingId: number
+    ) {
+        const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1];
+        if (!Array.isArray(initialStatus)) {
+            throw new Error('typecheck failed in generatePopupScheduleBook');
+        }
+        const element = container(
+            '<li class="text-danger list-group-item list-group-item-action">'
+        )(tutors.createLabel(id, x => x.friendlyFullName), ' (booked)');
+        if (mod < 10) {
+            scheduleDomA
+                .children()
+                .eq(mod - 1)
+                .children()
+                .eq(1)
+                .append(element);
+        } else {
+            scheduleDomB
+                .children()
+                .eq(mod - 11)
+                .children()
+                .eq(1)
+                .append(element);
+        }
+        const contentDom = container('<span>')('Details:');
+        contentDom.append(
+            bookings.createDomLabel(bookingId, x =>
+                container('<span>')(
+                    tutors.createFriendlyMarker(
+                        x.tutor,
+                        y => y.friendlyFullName
+                    ),
+                    ' <> ',
+                    requests.createFriendlyMarker(
+                        x.request,
+                        y => 'link to request',
+                        () => renavigate(['requests', x.request], false)
+                    )
+                )
+            )
+        );
+        element.popover({
+            content: contentDom[0],
+            placement: 'auto',
+            html: true,
+            trigger: 'click'
+        });
+    }
+
+    for (const { id, modStatus } of Object.values(tutorModStatusIndex)) {
+        for (let i = 0; i < 20; ++i) {
+            const status = modStatus[i];
+            if (Array.isArray(status)) {
+                if (status[0] === 'matched') {
+                    generatePopupScheduleMatch(id, i + 1);
+                }
+                if (status[0] === 'booked') {
+                    generatePopupScheduleBook(id, i + 1, status[1] as number);
+                }
+            }
+            if (typeof status === 'string') {
+                if (status.startsWith('dropIn')) {
+                    generatePopupAvailable(id, i + 1);
+                    generatePopupSchedule(id, i + 1);
+                }
+                if (status.startsWith('available')) {
+                    generatePopupAvailable(id, i + 1);
                 }
             }
         }
+    }
+
+    function generateMainContentPanel(newNavigationState: any[]) {
+        const day: string = newNavigationState[0] as string;
         return container('<div class="layout-h">')(
-            container('<div class="overflow-auto">')(
-                container('<h1>')('Available'),
-                availableDom
+            container('<div class="layout-v">')(
+                container('<h1 class="text-center layout-item-fit">')(
+                    'Available'
+                ),
+                container('<div class="overflow-auto p-2">')(
+                    availableDomA
+                        .addClass('overflow-auto')
+                        .toggleClass('d-none', !day.includes('A')),
+                    availableDomB
+                        .addClass('overflow-auto')
+                        .toggleClass('d-none', !day.includes('B'))
+                )
             ),
-            container('<div class="overflow-auto">')(
-                container('<h1>')('Schedule'),
-                ButtonWidget('Save', () => onSave()).dom,
-                scheduleDom
+            container('<div class="layout-v">')(
+                container('<h1 class="text-center layout-item-fit">')(
+                    'Schedule',
+                    ButtonWidget('Save', () => onSave()).dom,
+                    ButtonWidget('A days', () =>
+                        renavigate(['scheduleEdit', 'A'], true)
+                    ).dom,
+                    ButtonWidget('B days', () =>
+                        renavigate(['scheduleEdit', 'B'], true)
+                    ).dom,
+                    ButtonWidget('Both days', () =>
+                        renavigate(['scheduleEdit', 'AB'], true)
+                    ).dom
+                ),
+                container('<div class="overflow-auto p-2">')(
+                    scheduleDomA.toggleClass('d-none', !day.includes('A')),
+                    scheduleDomB.toggleClass('d-none', !day.includes('B'))
+                )
             )
         );
     }
@@ -1243,6 +1352,11 @@ export function rootWidget(): Widget {
                         navigationState[1]
                     ]);
                 }
+                if (navigationState[0] === 'scheduleEdit') {
+                    currentNavigationScope.generateMainContentPanel([
+                        navigationState[1]
+                    ]);
+                }
             } else {
                 if (newNavigationState[0] === undefined) {
                     currentNavigationScope = homepageNavigationScope();
@@ -1256,7 +1370,9 @@ export function rootWidget(): Widget {
                     );
                 }
                 if (navigationState[0] === 'scheduleEdit') {
-                    currentNavigationScope = scheduleEditNavigationScope();
+                    currentNavigationScope = scheduleEditNavigationScope(
+                        renavigate
+                    );
                 }
                 if (navigationState[0] === 'scheduleView') {
                     currentNavigationScope = scheduleViewNavigationScope();
@@ -1266,20 +1382,26 @@ export function rootWidget(): Widget {
                         renavigate
                     );
                 }
-                generateSidebar(currentNavigationScope.sidebar);
+                generateSidebar(currentNavigationScope.sidebar, keepScope);
             }
             generateMainContentPanel(
                 currentNavigationScope.generateMainContentPanel(
                     navigationState.slice(1)
-                )
+                ),
+                keepScope
             );
         } catch (e) {
             alertError(e); // TODO
         }
     }
-    function generateSidebar(content?: JQuery): void {
-        // deal with popovers
-        $('.popover').popover('dispose');
+    function generateSidebar(content: JQuery, keepScope: boolean): void {
+        if (!keepScope) {
+            // deal with popovers
+            $('.popover').popover('dispose');
+        } else {
+            $('.popover').popover('hide');
+        }
+
         sidebarDom.empty();
         sidebarDom.removeClass('col-4 overflow-auto app-sidebar d-none');
         if (content) {
@@ -1289,9 +1411,16 @@ export function rootWidget(): Widget {
             sidebarDom.addClass('d-none');
         }
     }
-    function generateMainContentPanel(content?: JQuery): void {
-        // deal with popovers
-        $('.popover').popover('dispose');
+    function generateMainContentPanel(
+        content: JQuery,
+        keepScope: boolean
+    ): void {
+        if (!keepScope) {
+            // deal with popovers
+            $('.popover').popover('dispose');
+        } else {
+            $('.popover').popover('hide');
+        }
         mainContentPanelDom.empty();
         mainContentPanelDom.removeClass('col app-content-panel layout-v');
         if (content) {
@@ -1348,7 +1477,7 @@ export function rootWidget(): Widget {
                     renavigate(['requests'], false);
                 }
                 if (text == 'Edit schedule') {
-                    renavigate(['scheduleEdit'], false);
+                    renavigate(['scheduleEdit', 'A'], false);
                 }
                 if (text == 'View schedule') {
                     renavigate(['scheduleView'], false);

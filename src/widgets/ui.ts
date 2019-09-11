@@ -127,7 +127,8 @@ export function showModal(
             preventAutoClose?: boolean
         ): JQuery;
         close: () => void;
-    }) => JQuery[]
+    }) => JQuery[],
+    preventBackgroundClose?: boolean
 ): Promise<void> & { closeModal: () => void } {
     const dom = $(modalHtmlString);
     dom.find('.modal-title').text(title);
@@ -160,7 +161,13 @@ export function showModal(
     dom.find('.modal-footer').append(
         buildButtons(buildButtonsParameterFunction)
     );
-    dom.modal();
+    const settings: any = {};
+    // https://stackoverflow.com/questions/22207377/disable-click-outside-of-bootstrap-modal-area-to-close-modal
+    if (preventBackgroundClose) {
+        settings.backdrop = 'static';
+        settings.keyboard = false;
+    }
+    dom.modal(settings);
     const modifiedPromise: any = new Promise<void>(res => {
         dom.on('hidden.bs.modal', () => res());
     });
