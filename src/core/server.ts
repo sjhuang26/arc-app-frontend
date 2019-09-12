@@ -83,7 +83,11 @@ export async function askServer(args: any[]): Promise<AskFinished<any>> {
   try {
     if (window["APP_DEBUG_MOCK"] !== 1) {
       console.log("[server]    args", args)
-      result = await failAfterFiveSeconds(realServer(args))
+      if (args[0] === "command") {
+        result = await realServer(args)
+      } else {
+        result = await failAfterFiveSeconds(realServer(args))
+      }
       console.log("[server]  result", args, "=>", result)
     } else {
       console.log("[MOCK server]   args", args)

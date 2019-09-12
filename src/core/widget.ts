@@ -836,6 +836,46 @@ function scheduleEditNavigationScope(
       matching.id
     ]
   }
+  function popupUtilPlaceElement(
+    domA: JQuery,
+    domB: JQuery,
+    {
+      mod,
+      element,
+      popoverContent
+    }: {
+      mod: number
+      element: JQuery
+      popoverContent: () => JQuery
+    }
+  ) {
+    if (mod < 10) {
+      domA
+        .children()
+        .eq(mod - 1)
+        .children()
+        .eq(1)
+        .append(element)
+    } else {
+      domB
+        .children()
+        .eq(mod - 11)
+        .children()
+        .eq(1)
+        .append(element)
+    }
+    const popoverContentDom = $("<div>")
+    element.popover({
+      content: popoverContentDom[0],
+      placement: "auto",
+      html: true,
+      trigger: "click"
+    })
+    element.on("show.bs.popover", () => {
+      popoverContentDom.empty()
+      popoverContentDom.append(popoverContent())
+    })
+  }
   function generatePopupAvailable(id: number, mod: number) {
     const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1]
     if (typeof initialStatus !== "string") {
@@ -850,57 +890,44 @@ function scheduleEditNavigationScope(
     if (initialStatus.endsWith("Pref")) {
       element.addClass("text-primary")
     }
-    if (mod < 10) {
-      availableDomA
-        .children()
-        .eq(mod - 1)
-        .children()
-        .eq(1)
-        .append(element)
-    } else {
-      availableDomB
-        .children()
-        .eq(mod - 11)
-        .children()
-        .eq(1)
-        .append(element)
+
+    function popoverContent() {
+      const popoverContent = container('<div class="btn-group m-2">')()
+      for (let i = 0; i < 20; ++i) {
+        const status = tutorModStatusIndex[id].modStatus[i]
+        if (typeof status !== "string" || !status.startsWith("available"))
+          continue
+        popoverContent.append(
+          ButtonWidget(
+            String(i + 1) + (status === "availablePref" ? "*" : ""),
+            () => {
+              const arr = editedDropInModsIndex[id]
+              // add the new mod
+              arr.push(i + 1)
+              // sort
+              arr.sort()
+              // edit status index
+              tutorModStatusIndex[id].modStatus[i] =
+                tutorModStatusIndex[id].modStatus[i] === "availablePref"
+                  ? "dropInPref"
+                  : "dropIn"
+              // hide popover
+              element.popover("hide")
+              // rebind data handler
+              generatePopupSchedule(id, i + 1)
+            }
+          ).dom
+        )
+      }
+      return popoverContent
     }
-    const buttons = container('<div class="btn-group m-2">')()
-    for (let i = 0; i < 20; ++i) {
-      const status = tutorModStatusIndex[id].modStatus[i]
-      if (typeof status !== "string" || !status.startsWith("available"))
-        continue
-      buttons.append(
-        ButtonWidget(
-          String(i + 1) + (status === "availablePref" ? "*" : ""),
-          () => {
-            const arr = editedDropInModsIndex[id]
-            // add the new mod
-            arr.push(i + 1)
-            // sort
-            arr.sort()
-            // edit status index
-            tutorModStatusIndex[id].modStatus[i] =
-              tutorModStatusIndex[id].modStatus[i] === "availablePref"
-                ? "dropInPref"
-                : "dropIn"
-            // hide popover
-            element.popover("hide")
-            // rebind data handler
-            generatePopupSchedule(id, i + 1)
-          }
-        ).dom
-      )
-    }
-    element.popover({
-      content: buttons[0],
-      placement: "auto",
-      html: true,
-      trigger: "click"
+    popupUtilPlaceElement(availableDomA, availableDomB, {
+      mod,
+      element,
+      popoverContent
     })
   }
   function generatePopupSchedule(id: number, mod: number) {
-    console.log(tutorModStatusIndex)
     const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1]
     if (typeof initialStatus !== "string") {
       throw new Error("typecheck failed in generatePopupSchedule")
@@ -914,80 +941,67 @@ function scheduleEditNavigationScope(
     if (initialStatus.endsWith("Pref")) {
       element.addClass("text-primary")
     }
-    if (mod < 10) {
-      scheduleDomA
-        .children()
-        .eq(mod - 1)
-        .children()
-        .eq(1)
-        .append(element)
-    } else {
-      scheduleDomB
-        .children()
-        .eq(mod - 11)
-        .children()
-        .eq(1)
-        .append(element)
+    function popoverContent() {
+      const popoverContent = container('<div class="btn-group m-2">')()
+      for (let i = 0; i < 20; ++i) {
+        const status = tutorModStatusIndex[id].modStatus[i]
+        if (typeof status !== "string" || !status.startsWith("available"))
+          continue
+        popoverContent.append(
+          ButtonWidget(
+            String(i + 1) + (status === "availablePref" ? "*" : ""),
+            () => {
+              // remove the mod
+              const arr = editedDropInModsIndex[id]
+              arr.splice(arr.indexOf(mod), 1)
+              // add the mod
+              arr.push(i + 1)
+              // sort
+              arr.sort()
+              // edit status index
+              tutorModStatusIndex[id].modStatus[mod - 1] =
+                tutorModStatusIndex[id].modStatus[mod - 1] === "dropInPref"
+                  ? "availablePref"
+                  : "available"
+              tutorModStatusIndex[id].modStatus[i] =
+                tutorModStatusIndex[id].modStatus[i] === "availablePref"
+                  ? "dropInPref"
+                  : "dropIn"
+              // dispose popover
+              element.popover("dispose")
+              // destroy element
+              element.remove()
+              // recreate popup
+              generatePopupSchedule(id, i + 1)
+            }
+          ).dom
+        )
+      }
+      popoverContent.append(
+        ButtonWidget("X", () => {
+          // remove the mod entirely
+          const arr = editedDropInModsIndex[id]
+          arr.splice(arr.indexOf(mod), 1)
+          // sort
+          arr.sort()
+          // edit status index
+          tutorModStatusIndex[id].modStatus[mod - 1] =
+            tutorModStatusIndex[id].modStatus[mod - 1] === "dropInPref"
+              ? "availablePref"
+              : "available"
+          // detach element
+          element.detach()
+          // dispose popover
+          element.popover("dispose")
+        }).dom
+      )
+      return popoverContent
     }
 
-    const buttons = container('<div class="btn-group m-2">')()
-    for (let i = 0; i < 20; ++i) {
-      const status = tutorModStatusIndex[id].modStatus[i]
-      if (typeof status !== "string" || !status.startsWith("available"))
-        continue
-      buttons.append(
-        ButtonWidget(
-          String(i + 1) + (status === "availablePref" ? "*" : ""),
-          () => {
-            // remove the mod
-            const arr = editedDropInModsIndex[id]
-            arr.splice(arr.indexOf(mod), 1)
-            // add the mod
-            arr.push(i + 1)
-            // sort
-            arr.sort()
-            // edit status index
-            tutorModStatusIndex[id].modStatus[mod - 1] =
-              tutorModStatusIndex[id].modStatus[mod - 1] === "dropInPref"
-                ? "availablePref"
-                : "available"
-            tutorModStatusIndex[id].modStatus[i] =
-              tutorModStatusIndex[id].modStatus[i] === "availablePref"
-                ? "dropInPref"
-                : "dropIn"
-            // dispose popover
-            element.popover("dispose")
-            // destroy element
-            element.remove()
-            // recreate popup
-            generatePopupSchedule(id, i + 1)
-          }
-        ).dom
-      )
-    }
-    buttons.append(
-      ButtonWidget("X", () => {
-        // remove the mod entirely
-        const arr = editedDropInModsIndex[id]
-        arr.splice(arr.indexOf(mod), 1)
-        // sort
-        arr.sort()
-        // edit status index
-        tutorModStatusIndex[id].modStatus[mod - 1] =
-          tutorModStatusIndex[id].modStatus[mod - 1] === "dropInPref"
-            ? "availablePref"
-            : "available"
-        // detach element
-        element.detach()
-        // dispose popover
-        element.popover("dispose")
-      }).dom
-    )
-    element.popover({
-      content: buttons[0],
-      placement: "auto",
-      html: true,
-      trigger: "click"
+    popupUtilPlaceElement(scheduleDomA, scheduleDomB, {
+      mod,
+      element,
+      popoverContent
     })
   }
   function generatePopupScheduleMatch(id: number, mod: number) {
@@ -1002,36 +1016,24 @@ function scheduleEditNavigationScope(
         x => tutors.createLabel(x.tutor, y => y.friendlyFullName) + " (matched)"
       )
     )
-    if (mod < 10) {
-      scheduleDomA
-        .children()
-        .eq(mod - 1)
-        .children()
-        .eq(1)
-        .append(element)
-    } else {
-      scheduleDomB
-        .children()
-        .eq(mod - 11)
-        .children()
-        .eq(1)
-        .append(element)
-    }
-    const contentDom = container("<span>")("Details:")
-    contentDom.append(
-      matchings.createDomLabel(matchingId, x =>
-        container("<span>")(
-          tutors.createFriendlyMarker(x.tutor, y => y.friendlyFullName),
-          " <> ",
-          learners.createFriendlyMarker(x.learner, y => y.friendlyFullName)
+
+    function popoverContent() {
+      return container("<span>")(
+        "Details:",
+        matchings.createDomLabel(matchingId, x =>
+          container("<span>")(
+            tutors.createFriendlyMarker(x.tutor, y => y.friendlyFullName),
+            " <> ",
+            learners.createFriendlyMarker(x.learner, y => y.friendlyFullName)
+          )
         )
       )
-    )
-    element.popover({
-      content: contentDom[0],
-      placement: "auto",
-      html: true,
-      trigger: "click"
+    }
+
+    popupUtilPlaceElement(scheduleDomA, scheduleDomB, {
+      mod,
+      element,
+      popoverContent
     })
   }
   function generatePopupScheduleBook(
@@ -1046,40 +1048,26 @@ function scheduleEditNavigationScope(
     const element = container(
       '<li class="text-danger list-group-item list-group-item-action">'
     )(tutors.createLabel(id, x => x.friendlyFullName), " (booked)")
-    if (mod < 10) {
-      scheduleDomA
-        .children()
-        .eq(mod - 1)
-        .children()
-        .eq(1)
-        .append(element)
-    } else {
-      scheduleDomB
-        .children()
-        .eq(mod - 11)
-        .children()
-        .eq(1)
-        .append(element)
-    }
-    const contentDom = container("<span>")("Details:")
-    contentDom.append(
-      bookings.createDomLabel(bookingId, x =>
-        container("<span>")(
-          tutors.createFriendlyMarker(x.tutor, y => y.friendlyFullName),
-          " <> ",
-          requests.createFriendlyMarker(
-            x.request,
-            y => "link to request",
-            () => renavigate(["requests", x.request], false)
+    function popoverContent() {
+      return container("<span>")(
+        "Details:",
+        bookings.createDomLabel(bookingId, x =>
+          container("<span>")(
+            tutors.createFriendlyMarker(x.tutor, y => y.friendlyFullName),
+            " <> ",
+            requests.createFriendlyMarker(
+              x.request,
+              y => "link to request",
+              () => renavigate(["requests", x.request], false)
+            )
           )
         )
       )
-    )
-    element.popover({
-      content: contentDom[0],
-      placement: "auto",
-      html: true,
-      trigger: "click"
+    }
+    popupUtilPlaceElement(scheduleDomA, scheduleDomB, {
+      mod,
+      element,
+      popoverContent
     })
   }
 
