@@ -193,7 +193,25 @@ export function FormStringInputWidget(type: string): FormValueWidget<string> {
       return dom.val(newVal)
     },
     onChange(doThis: (newVal: string) => void): void {
-      dom.val(() => doThis.call(null, dom.val() as string))
+      dom.change(() => doThis.call(null, dom.val() as string))
+    }
+  }
+}
+
+export function FormTextareaWidget(): FormValueWidget<string> {
+  const dom = $(`<textarea class="form-control">`)
+  return {
+    dom,
+    getValue(): string {
+      return String(dom.val())
+    },
+    setValue(newVal: string): JQuery {
+      return dom.val(newVal)
+    },
+    onChange(doThis: (newVal: string) => void): void {
+      dom.change(() => {
+        doThis.call(null, dom.val() as string)
+      })
     }
   }
 }
@@ -210,7 +228,7 @@ export function FormJsonInputWidget(defaultValue: any): FormValueWidget<any> {
       return dom.val(JSON.stringify(newVal))
     },
     onChange(doThis: (newVal: any) => void): void {
-      dom.val(() => doThis.call(null, JSON.parse(dom.val() as string)))
+      dom.change(() => doThis.call(null, JSON.parse(dom.val() as string)))
     }
   }
 }
@@ -251,7 +269,7 @@ export function FormNumberInputWidget(type: string): FormValueWidget<number> {
       return dom.val(val)
     },
     onChange(doThis) {
-      dom.val(doThis.call(null, getVal()))
+      dom.change(doThis.call(null, getVal()))
     }
   }
 }
@@ -282,7 +300,7 @@ export function FormNumberArrayInputWidget(
       return dom.val(val.map(x => String(x)).join(", "))
     },
     onChange(doThis) {
-      dom.val(doThis.call(null, getVal()))
+      dom.change(doThis.call(null, getVal()))
     }
   }
 }

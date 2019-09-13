@@ -672,7 +672,8 @@ export function makeBasicStudentConfig(): [string, FormFieldType][] {
       SelectField(["email", "phone", "either"], ["Email", "Phone", "Either"])
     ],
     ["homeroom", StringField("text")],
-    ["homeroomTeacher", StringField("text")]
+    ["homeroomTeacher", StringField("text")],
+    ["attendanceAnnotation", StringField("text")]
   ]
 }
 
@@ -749,7 +750,6 @@ const tutorsInfo: UnprocessedResourceInfo = {
     ["attendance", JsonField({})],
     ["dropInMods", NumberArrayField("number")],
     ["afterSchoolAvailability", StringField("text")],
-    ["attendanceAnnotation", StringField("text")],
     ["additionalHours", StringField("text")]
   ],
   fieldNameMap,

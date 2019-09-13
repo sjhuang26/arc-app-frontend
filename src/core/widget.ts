@@ -21,7 +21,8 @@ import {
   FormSelectWidget,
   FormToggleWidget,
   MessageTemplateWidget,
-  ListGroupNavigationWidget
+  ListGroupNavigationWidget,
+  FormTextareaWidget
 } from "../widgets/ui"
 import { TableWidget } from "../widgets/Table"
 import { AskStatus, getResultOrFail, askServer } from "./server"
@@ -73,6 +74,9 @@ const navigationBarString = `
     </li>
     <li class="nav-item">
         <a class="nav-link">Attendance</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link">After-school availability</a>
     </li>
     <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle" data-toggle="dropdown">Other</a>
@@ -176,6 +180,28 @@ function showStep1Messager(bookingId: number) {
     ),
     bb => [bb("OK", "primary")]
   )
+}
+
+function showAfterSchoolAvailablityModal() {
+  try {
+    const tutorRecords = tutors.state.getRecordCollectionOrFail()
+    const filtered: number[] = []
+    const table = TableWidget(["Name", "Availability"], (id: number) => [
+      tutors.createDataEditorMarker(id, x => x.friendlyFullName),
+      tutors.createLabel(id, x => x.afterSchoolAvailability)
+    ])
+    for (const tutor of Object.values(tutorRecords)) {
+      if (tutor.afterSchoolAvailability !== "") {
+        filtered.push(tutor.id)
+      }
+    }
+    table.setAllValues(filtered)
+    showModal("After-school availability", table.dom, bb => [
+      bb("Close", "primary")
+    ])
+  } catch (e) {
+    alertError(e)
+  }
 }
 
 async function requestChangeToStep4(requestId: number, onFinish: () => void) {
@@ -397,6 +423,7 @@ function requestsNavigationScope(
           contactPref: record.contactPref,
           homeroom: record.homeroom,
           homeroomTeacher: record.homeroomTeacher,
+          attendanceAnnotation: "",
           attendance: {}
         })
       )
@@ -651,9 +678,19 @@ function requestsNavigationScope(
         const uiStep2 = container('<div class="jumbotron">')(
           container("<h1>")("Write a pass for the learner"),
           container('<p class="lead">')("Here is the information:"),
-          container("<p>")("Homeroom = " + requestRecords[requestId].homeroom),
           container("<p>")(
-            "Homeroom teacher = " + requestRecords[requestId].homeroomTeacher
+            "Homeroom = " +
+              learners.createLabel(
+                requestRecords[requestId].learner,
+                x => x.homeroom
+              )
+          ),
+          container("<p>")(
+            "Homeroom teacher = " +
+              learners.createLabel(
+                requestRecords[requestId].learner,
+                x => x.homeroomTeacher
+              )
           ),
           ButtonWidget("OK, I've written the pass", () =>
             requestChangeToStep3(requestId, () =>
@@ -849,17 +886,17 @@ function scheduleEditNavigationScope(
       popoverContent: () => JQuery
     }
   ) {
-    if (mod < 10) {
-      domA
+    if (mod > 10) {
+      domB
         .children()
-        .eq(mod - 1)
+        .eq(mod - 11)
         .children()
         .eq(1)
         .append(element)
     } else {
-      domB
+      domA
         .children()
-        .eq(mod - 11)
+        .eq(mod - 1)
         .children()
         .eq(1)
         .append(element)
@@ -875,6 +912,20 @@ function scheduleEditNavigationScope(
       popoverContentDom.empty()
       popoverContentDom.append(popoverContent())
     })
+  }
+  function popupUtilCountUnavailable(id: number) {
+    let x = 0
+    for (let i = 0; i < 20; ++i) {
+      const status = tutorModStatusIndex[id].modStatus[i]
+      if (
+        status !== "none" &&
+        status !== "available" &&
+        status !== "availablePref"
+      ) {
+        ++x
+      }
+    }
+    return x
   }
   function generatePopupAvailable(id: number, mod: number) {
     const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1]
@@ -893,6 +944,9 @@ function scheduleEditNavigationScope(
 
     function popoverContent() {
       const popoverContent = container('<div class="btn-group m-2">')()
+      popoverContent.append(
+        ButtonWidget(`(${popupUtilCountUnavailable(id)}x)`, () => {}).dom
+      )
       for (let i = 0; i < 20; ++i) {
         const status = tutorModStatusIndex[id].modStatus[i]
         if (typeof status !== "string" || !status.startsWith("available"))
@@ -943,6 +997,9 @@ function scheduleEditNavigationScope(
     }
     function popoverContent() {
       const popoverContent = container('<div class="btn-group m-2">')()
+      popoverContent.append(
+        ButtonWidget(`(${popupUtilCountUnavailable(id)}x)`, () => {}).dom
+      )
       for (let i = 0; i < 20; ++i) {
         const status = tutorModStatusIndex[id].modStatus[i]
         if (typeof status !== "string" || !status.startsWith("available"))
@@ -1132,8 +1189,6 @@ function scheduleEditNavigationScope(
   }
 }
 
-function scheduleViewNavigationScope(): NavigationScope {}
-
 function attendanceNavigationScope(
   renavigate: (newNavigationState: any[], keepScope: boolean) => void
 ): NavigationScope {
@@ -1169,7 +1224,7 @@ function attendanceNavigationScope(
           x => x.friendlyFullName
         ),
         String(totalMinutes),
-        `${numPresent}P / ${numExcused} / ${numAbsent}A`,
+        `${numPresent}P / ${numExcused}EX / ${numAbsent}A`,
         ButtonWidget("Details", () => {
           renavigate(["attendance", student.id], true)
         }).dom
@@ -1188,14 +1243,11 @@ function attendanceNavigationScope(
       if (studentId === undefined) {
         return null
       }
-      console.log(navigationState, data, studentId)
       const matchingStudents = data.filter(x => x.student.id === studentId)
       if (matchingStudents.length !== 1) {
         throw new Error("no matching students with ID")
       }
       const { isLearner, student } = matchingStudents[0]
-
-      console.log(student)
 
       const header = container("<h1>")(
         (isLearner ? learners : tutors).createFriendlyMarker(
@@ -1203,6 +1255,18 @@ function attendanceNavigationScope(
           x => x.friendlyFullName
         )
       )
+      const attendanceAnnotation = FormTextareaWidget()
+      attendanceAnnotation.setValue(student.attendanceAnnotation)
+      attendanceAnnotation.onChange(async newVal => {
+        student.attendanceAnnotation = newVal
+        try {
+          getResultOrFail(
+            await (isLearner ? learners : tutors).state.updateRecord(student)
+          )
+        } catch (e) {
+          alertError(e)
+        }
+      })
       const table = TableWidget(
         // Both learners and tutors are students.
         ["Date", "Mod", "Present?"],
@@ -1223,7 +1287,12 @@ function attendanceNavigationScope(
         }
       }
       table.setAllValues(attendanceData)
-      return container("<div>")(header, table.dom)
+      return container("<div>")(
+        header,
+        $('<p class="lead">Attendance annotation:</p>'),
+        attendanceAnnotation.dom,
+        table.dom
+      )
     },
     sidebar: container("<div>")($("<h1>Attendance</h1>"), sidebarTable.dom)
   }
@@ -1283,7 +1352,12 @@ export function rootWidget(): Widget {
           currentNavigationScope = scheduleEditNavigationScope(renavigate)
         }
         if (navigationState[0] === "scheduleView") {
-          currentNavigationScope = scheduleViewNavigationScope()
+          //currentNavigationScope = scheduleViewNavigationScope()
+          showModal(
+            "Not supported",
+            "The view schedule feature is not supported. You shouldn't need it.",
+            bb => [bb("OK", "primary")]
+          )
         }
         if (navigationState[0] === "attendance") {
           currentNavigationScope = attendanceNavigationScope(renavigate)
@@ -1420,13 +1494,18 @@ export function rootWidget(): Widget {
           "Recalculate attendance",
           "Recalculating attendance...",
           async (result: any) => {
-            showModal("Attendance successfully recalculated", "", bb => [
-              bb("OK", "primary")
-            ])
+            showModal(
+              `Attendance successfully recalculated: ${result} attendances were modified`,
+              "",
+              bb => [bb("OK", "primary")]
+            )
           }
         )
 
         // MISC
+        if (text == "After-school availability") {
+          showAfterSchoolAvailablityModal()
+        }
         if (text == "About") {
           renavigate(["about"], false)
         }
