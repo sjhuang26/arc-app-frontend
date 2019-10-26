@@ -69,7 +69,6 @@ const navigationBarString = `
         <div class="dropdown-menu dropdown-menu-right">
             <a class="dropdown-item">Handle requests</a>
             <a class="dropdown-item">Edit schedule</a>
-            <a class="dropdown-item">View schedule</a>
         </div>
     </li>
     <li class="nav-item">
@@ -1351,14 +1350,6 @@ export function rootWidget(): Widget {
         if (navigationState[0] === "scheduleEdit") {
           currentNavigationScope = scheduleEditNavigationScope(renavigate)
         }
-        if (navigationState[0] === "scheduleView") {
-          //currentNavigationScope = scheduleViewNavigationScope()
-          showModal(
-            "Not supported",
-            "The view schedule feature is not supported. You shouldn't need it.",
-            bb => [bb("OK", "primary")]
-          )
-        }
         if (navigationState[0] === "attendance") {
           currentNavigationScope = attendanceNavigationScope(renavigate)
         }
@@ -1452,9 +1443,6 @@ export function rootWidget(): Widget {
         }
         if (text == "Edit schedule") {
           renavigate(["scheduleEdit", "A"], false)
-        }
-        if (text == "View schedule") {
-          renavigate(["scheduleView"], false)
         }
 
         // ATTENDANCE
