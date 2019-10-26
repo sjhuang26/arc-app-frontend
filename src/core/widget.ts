@@ -577,7 +577,7 @@ function requestsNavigationScope(
       }
     )
     requestsTable.setAllValues(
-      Object.values(requestRecords).sort((a, b) => (a.step < b.step ? 1 : -1))
+      Object.values(requestRecords).sort((a, b) => (a.step < b.step ? -1 : 1))
     )
     return requestsTable.dom
   }
@@ -1207,12 +1207,19 @@ function scheduleEditNavigationScope(
 
     function popoverContent() {
       return container("<span>")(
-        "Details:",
+        "Details: ",
         matchings.createDomLabel(matchingId, x =>
           container("<span>")(
+            "tutor: ",
             tutors.createFriendlyMarker(x.tutor, y => y.friendlyFullName),
-            " <> ",
-            learners.createFriendlyMarker(x.learner, y => y.friendlyFullName)
+            "<> learner: ",
+            x.learner === -1
+              ? "(SPECIAL)"
+              : learners.createFriendlyMarker(
+                  x.learner,
+                  y => y.friendlyFullName
+                ),
+            x.annotation === "" ? undefined : ` (INFO: ${x.annotation})`
           )
         )
       )
@@ -1345,8 +1352,8 @@ function attendanceNavigationScope(
             ++numAbsent
           } else {
             ++numPresent
+            totalMinutes += minutes
           }
-          totalMinutes += minutes
         }
       }
       return [
@@ -1406,7 +1413,9 @@ function attendanceNavigationScope(
             new Date(attendanceEntry.date).toISOString().substring(0, 10),
             String(attendanceEntry.mod),
             attendanceEntry.minutes > 0
-              ? `P (${attendanceEntry.minutes} minutes)`
+              ? attendanceEntry.minutes === 1
+                ? "EXCUSED"
+                : `P (${attendanceEntry.minutes} minutes)`
               : $('<span style="color:red">ABSENT</span>')
           ]
         }
@@ -1425,7 +1434,10 @@ function attendanceNavigationScope(
         table.dom
       )
     },
-    sidebar: container("<div>")($("<h1>Attendance</h1>"), sidebarTable.dom)
+    sidebar: container('<div class="overflow-auto">')(
+      $("<h1>Attendance</h1>"),
+      sidebarTable.dom
+    )
   }
 }
 
