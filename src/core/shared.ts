@@ -671,9 +671,9 @@ export function makeBasicStudentConfig(): [string, FormFieldType][] {
       "contactPref",
       SelectField(["email", "phone", "either"], ["Email", "Phone", "Either"])
     ],
-    ["homeroom", StringField("text")],
-    ["homeroomTeacher", StringField("text")],
-    ["attendanceAnnotation", StringField("text")]
+    ["homeroom", StringField("text", "optional")],
+    ["homeroomTeacher", StringField("text", "optional")],
+    ["attendanceAnnotation", StringField("text", "optional")]
   ]
 }
 
@@ -749,8 +749,8 @@ const tutorsInfo: UnprocessedResourceInfo = {
     ["subjectList", StringField("text")],
     ["attendance", JsonField({})],
     ["dropInMods", NumberArrayField("number")],
-    ["afterSchoolAvailability", StringField("text")],
-    ["additionalHours", StringField("text")]
+    ["afterSchoolAvailability", StringField("text", "optional")],
+    ["additionalHours", NumberField("number", "optional")]
   ],
   fieldNameMap,
   tableFieldTitles: ["Name", "Grade", "Mods", "Subjects"],
@@ -781,7 +781,7 @@ const requestsInfo: UnprocessedResourceInfo = {
     ["learner", NumberField("id")],
     ["mods", NumberArrayField("number")],
     ["subject", StringField("text")],
-    ["specialRoom", StringField("text")],
+    ["specialRoom", StringField("text", "optional")],
     ["step", NumberField("number")],
     ["chosenBooking", NumberField("id")]
   ],
@@ -838,7 +838,7 @@ const matchingsInfo: UnprocessedResourceInfo = {
     ["tutor", StringField("text")],
     ["subject", StringField("text")],
     ["mod", NumberField("number")],
-    ["specialRoom", StringField("text")]
+    ["specialRoom", StringField("text", "optional")]
   ],
   fieldNameMap,
   tableFieldTitles: ["Learner", "Tutor", "Mod", "Subject", "Status"],
@@ -862,7 +862,7 @@ const requestSubmissionsInfo: UnprocessedResourceInfo = {
     ...makeBasicStudentConfig(),
     ["mods", NumberArrayField("number")],
     ["subject", StringField("text")],
-    ["specialRoom", StringField("text")],
+    ["specialRoom", StringField("text", "optional")],
     ["status", SelectField(["unchecked", "checked"], ["Unchecked", "Checked"])]
   ],
   fieldNameMap,

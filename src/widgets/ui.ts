@@ -305,26 +305,102 @@ export function FormNumberArrayInputWidget(
   }
 }
 
-export function StringField(type: string) {
-  return () => FormStringInputWidget(type)
+export function StringField(type: string, optional?: string): FormFieldType {
+  // () => FormStringInputWidget(type),
+  return {
+    makeWidget: () => FormStringInputWidget(type),
+    validator(val: any) {
+      if (typeof val !== "string") {
+        return "not text"
+      }
+      if (!(optional === "optional")) {
+        if (val === "") {
+          return "blank"
+        }
+        if (val.trim() === "") {
+          return "blank (whitespace only)"
+        }
+      }
+      return true
+    }
+  }
 }
-export function NumberField(type: string) {
-  return () => FormNumberInputWidget(type)
+export function NumberField(type: string, optional?: string): FormFieldType {
+  return {
+    makeWidget: () => FormNumberInputWidget(type),
+    validator(val: any) {
+      if (type === "number" || type === "datetime-local") {
+        if (typeof val !== "number") {
+          return "not a number"
+        }
+        // TODO support optionals, which will require null support for numbers
+        return true
+      }
+      return true
+    }
+  }
 }
-export function IdField() {
-  return () => FormNumberInputWidget("number")
+export function IdField(resource: string): FormFieldType {
+  return {
+    makeWidget: () => FormNumberInputWidget("number"),
+    validator(val: any) {
+      return {
+        resource,
+        id: val
+      }
+    }
+  }
 }
-export function SelectField(options: string[], optionTitles: string[]) {
-  return () => FormSelectWidget(options, optionTitles)
+export function SelectField(
+  options: string[],
+  optionTitles: string[]
+): FormFieldType {
+  return {
+    makeWidget: () => FormSelectWidget(options, optionTitles),
+    validator(val: any) {
+      // TODO: proper select field validation
+      if (typeof val !== "string") {
+        return "not text"
+      }
+      // select fields are never optional
+      if (val === "") {
+        return "blank"
+      }
+      if (val.trim() === "") {
+        return "blank (whitespace only)"
+      }
+      return true
+    }
+  }
 }
-export function NumberArrayField(type: string) {
-  return () => FormNumberArrayInputWidget(type)
+export function NumberArrayField(type: string): FormFieldType {
+  return {
+    makeWidget: () => FormNumberArrayInputWidget(type),
+    validator(val: any) {
+      // TODO: proper number array field validation
+      return true
+    }
+  }
 }
-export function JsonField(defaultValue: any) {
-  return () => FormJsonInputWidget(defaultValue)
+export function JsonField(defaultValue: any): FormFieldType {
+  return {
+    makeWidget: () => FormJsonInputWidget(defaultValue),
+    validator(val: any) {
+      // TODO: proper JSON field validation
+      return true
+    }
+  }
 }
 
-export type FormFieldType = () => FormValueWidget<any>
+export type FieldValidatorResult = true | string | FieldValidatorIdResult
+export type FieldValidatorIdResult = {
+  resource: string
+  id: number
+}
+export type FormFieldType = {
+  makeWidget: () => FormValueWidget<any>
+  validator: (val: any) => FieldValidatorResult
+}
 
 export function FormSubmitWidget(text: string): Widget {
   return DomWidget(

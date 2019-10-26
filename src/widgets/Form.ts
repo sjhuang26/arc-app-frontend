@@ -9,7 +9,7 @@ export function FormWidget(fields: ResourceFieldInfo[]): FormWidget {
   const widgets: { [fieldName: string]: FormValueWidget<any> } = {}
   const dom = container("<form></form>")(
     fields.map(({ title, type, name, info }) => {
-      const widget = type()
+      const widget = type.makeWidget()
       widgets[name] = widget
       return container('<div class="form-group row"></div>')(
         container('<label class="col-5 col-form-label"></label>')(
