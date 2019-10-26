@@ -317,6 +317,7 @@ export class Resource {
 
   createLabel(id: number, builder: (record: Record) => string): string {
     try {
+      if (id === -1) return "[NONE]"
       const record = this.state.getRecordOrFail(id)
       return builder.call(null, record)
     } catch (e) {
@@ -327,6 +328,7 @@ export class Resource {
 
   createDomLabel(id: number, builder: (record: Record) => JQuery): JQuery {
     try {
+      if (id === -1) return $("<span>[NONE]</span>")
       const record = this.state.getRecordOrFail(id)
       return builder.call(null, record)
     } catch (e) {
@@ -336,7 +338,7 @@ export class Resource {
   }
 
   // The edit window is kind of combined with the view window.
-  async makeTiledEditWindow(id: number): Promise<void> {
+  makeTiledEditWindow(id: number): void {
     let record: Record = null
     let errorMessage: string = ""
     try {
@@ -344,7 +346,7 @@ export class Resource {
         return w.charAt(0).toUpperCase() + w.slice(1)
       }
 
-      await this.state.getRecordCollectionOrFail()
+      this.state.getRecordCollectionOrFail()
       record = this.state.getRecordOrFail(id)
       const windowLabel =
         capitalizeWord(this.info.title) +
@@ -804,7 +806,7 @@ const learnersInfo: UnprocessedResourceInfo = {
 }
 const requestsInfo: UnprocessedResourceInfo = {
   fields: [
-    ["learner", IdField("learners")],
+    ["learner", IdField("learners", "optional")],
     ["mods", NumberArrayField("number")],
     ["subject", StringField("text")],
     ["isSpecial", BooleanField()],
@@ -815,19 +817,28 @@ const requestsInfo: UnprocessedResourceInfo = {
   fieldNameMap,
   tableFieldTitles: ["Learner", "Subject", "Mods"],
   makeTableRowContent: record => [
-    learners.createDataEditorMarker(record.learner, x => x.friendlyFullName),
+    record.learner === -1
+      ? "SPECIAL"
+      : learners.createDataEditorMarker(
+          record.learner,
+          x => x.friendlyFullName
+        ),
     record.subject,
     record.mods.join(", ")
   ],
   makeSearchableContent: record => [
-    learners.createFriendlyMarker(record.learner, x => x.friendlyFullName),
+    record.learner === -1
+      ? "SPECIAL"
+      : learners.createFriendlyMarker(record.learner, x => x.friendlyFullName),
     record.subject,
     record.mods.join(", ")
   ],
   title: "request",
   pluralTitle: "requests",
   makeLabel: record =>
-    learners.createLabel(record.learner, x => x.friendlyFullName)
+    record.learner === -1
+      ? "SPECIAL"
+      : learners.createLabel(record.learner, x => x.friendlyFullName)
 }
 
 const bookingsInfo: UnprocessedResourceInfo = {
@@ -846,19 +857,23 @@ const bookingsInfo: UnprocessedResourceInfo = {
   fieldNameMap,
   tableFieldTitles: ["Learner", "Tutor", "Mod", "Status"],
   makeTableRowContent: record => [
-    learners.createDataEditorMarker(
-      requests.state.getRecordOrFail(record.request).learner,
-      x => x.friendlyFullName
-    ),
+    record.learner === -1
+      ? "SPECIAL"
+      : learners.createDataEditorMarker(
+          requests.state.getRecordOrFail(record.request).learner,
+          x => x.friendlyFullName
+        ),
     tutors.createDataEditorMarker(record.tutor, x => x.friendlyFullName),
     record.mod,
     record.status
   ],
   makeSearchableContent: record => [
-    learners.createLabel(
-      requests.state.getRecordOrFail(record.request).learner,
-      x => x.friendlyFullName
-    ),
+    record.learner === -1
+      ? "SPECIAL"
+      : learners.createLabel(
+          requests.state.getRecordOrFail(record.request).learner,
+          x => x.friendlyFullName
+        ),
     tutors.createLabel(record.tutor, x => x.friendlyFullName),
     record.mod,
     record.status
@@ -868,14 +883,16 @@ const bookingsInfo: UnprocessedResourceInfo = {
   makeLabel: record =>
     tutors.state.getRecordOrFail(record.tutor).friendlyFullName +
     " <> " +
-    learners.state.getRecordOrFail(
-      requests.state.getRecordOrFail(record.request).learner
-    ).friendlyFullName
+    (requests.state.getRecordOrFail(record.request).learner === -1
+      ? "SPECIAL"
+      : learners.state.getRecordOrFail(
+          requests.state.getRecordOrFail(record.request).learner
+        ).friendlyFullName)
 }
 
 const matchingsInfo: UnprocessedResourceInfo = {
   fields: [
-    ["learner", IdField("learners")],
+    ["learner", IdField("learners", "optional")],
     ["tutor", IdField("tutors")],
     ["subject", StringField("text")],
     ["mod", NumberField("number")],
@@ -884,13 +901,20 @@ const matchingsInfo: UnprocessedResourceInfo = {
   fieldNameMap,
   tableFieldTitles: ["Learner", "Tutor", "Mod", "Subject", "Status"],
   makeTableRowContent: record => [
-    learners.createDataEditorMarker(record.learner, x => x.friendlyFullName),
+    record.learner === -1
+      ? "SPECIAL"
+      : learners.createDataEditorMarker(
+          record.learner,
+          x => x.friendlyFullName
+        ),
     tutors.createDataEditorMarker(record.tutor, x => x.friendlyFullName),
     record.mod,
     record.subject
   ],
   makeSearchableContent: record => [
-    learners.createLabel(record.learner, x => x.friendlyFullName),
+    record.learner === -1
+      ? "SPECIAL"
+      : learners.createLabel(record.learner, x => x.friendlyFullName),
     tutors.createLabel(record.tutor, x => x.friendlyFullName),
     record.mod,
     record.subject
@@ -900,7 +924,9 @@ const matchingsInfo: UnprocessedResourceInfo = {
   makeLabel: record =>
     tutors.state.getRecordOrFail(record.tutor).friendlyFullName +
     " <> " +
-    learners.state.getRecordOrFail(record.learner).friendlyFullName
+    (record.learner === -1
+      ? "SPECIAL"
+      : learners.state.getRecordOrFail(record.learner).friendlyFullName)
 }
 
 const requestSubmissionsInfo: UnprocessedResourceInfo = {

@@ -116,7 +116,7 @@ function showStep3Messager(bookingId: number) {
   const b = bookings.state.getRecordOrFail(bookingId)
   const r = requests.state.getRecordOrFail(b.request)
   const t = tutors.state.getRecordOrFail(b.tutor)
-  const l = learners.state.getRecordOrFail(r.learner)
+  const l = r.learner === -1 ? -1 : learners.state.getRecordOrFail(r.learner)
 
   const dom = $("<div></div>")
 
@@ -132,33 +132,30 @@ function showStep3Messager(bookingId: number) {
   dom.append(
     MessageTemplateWidget(
       `This is to confirm that starting now, you will be tutoring ${
-        l.friendlyFullName
+        l === -1 ? "<SPECIAL REQUEST -- FILL IN INFO>" : l.friendlyFullName
+      }
       } in subject ${r.subject} during mod ${stringifyMod(b.mod)}.`
     ).dom
   )
 
-  dom.append($("<p>Contact the learner:</p>"))
-  dom.append(
-    MessageTemplateWidget(
-      `This is to confirm that starting now, you will be tutored by ${
-        t.friendlyFullName
-      } in subject ${r.subject} during mod ${stringifyMod(b.mod)}.`
-    ).dom
-  )
+  if (r.isSpecial) {
+    dom.append(
+      $(
+        "<p>Because this is a special request, you do not need to contact the learner."
+      )
+    )
+  } else {
+    dom.append($("<p>Contact the learner:</p>"))
+    dom.append(
+      MessageTemplateWidget(
+        `This is to confirm that starting now, you will be tutored by ${
+          t.friendlyFullName
+        } in subject ${r.subject} during mod ${stringifyMod(b.mod)}.`
+      ).dom
+    )
+  }
 
-  showModal(
-    "Messager",
-    container("<div>")(
-      container("<h1>")(
-        "Messager for ",
-        learners.createDataEditorMarker(r.learner, x => x.friendlyFullName),
-        " <> ",
-        tutors.createDataEditorMarker(b.tutor, x => x.friendlyFullName)
-      ),
-      dom
-    ),
-    bb => [bb("OK", "primary")]
-  )
+  showModal("Messager", dom, bb => [bb("OK", "primary")])
 }
 
 function showStep1Messager(bookingId: number) {
@@ -567,7 +564,9 @@ function requestsNavigationScope(
       (i: Record) => {
         return [
           requests.createDataEditorMarker(i.id, x =>
-            learners.createLabel(x.learner, y => y.friendlyFullName)
+            x.learner === -1
+              ? "SPECIAL"
+              : learners.createLabel(x.learner, y => y.friendlyFullName)
           ),
           String(requestIndex[i.id].uiStep),
           ButtonWidget("Open", () => {
@@ -637,7 +636,7 @@ function requestsNavigationScope(
   }
   function generateBookerTable(bookerTableValues: Record[]): JQuery {
     const bookerTable = TableWidget(
-      ["Booking", "Status", "Todo"],
+      ["Booked tutor", "Status", "Todo"],
       (booking: Record) => {
         const formSelectWidget = FormSelectWidget(
           ["ignore", "unsent", "waitingForTutor", "selected", "rejected"],
@@ -651,16 +650,11 @@ function requestsNavigationScope(
             alertError(response.message)
           }
         })
+        const learnerId = requests.state.getRecordOrFail(booking.request)
+          .learner
         return [
-          bookings.createFriendlyMarker(
-            booking.id,
-            b =>
-              tutors.createLabel(booking.tutor, x => x.friendlyFullName) +
-              " <> " +
-              learners.createLabel(
-                requests.state.getRecordOrFail(booking.request).learner,
-                x => x.friendlyFullName
-              )
+          bookings.createFriendlyMarker(booking.id, b =>
+            tutors.createLabel(booking.tutor, x => x.friendlyFullName)
           ),
           formSelectWidget.dom,
           ButtonWidget("Todo", () => showStep1Messager(booking.id)).dom
@@ -738,40 +732,46 @@ function requestsNavigationScope(
       }
       const request = requests.state.getRecordOrFail(requestId)
 
-      const header = container("<div>")(
-        container('<span class="badge badge-secondary">')(
-          `Step ${requestIndex[requestId].uiStep} (${stepToName(
-            requestIndex[requestId].uiStep
-          )})`
-        ),
-        container("<p>")(
-          requests.createFriendlyMarker(requestId, x => "Link to request")
-        ),
-        container("<p>")(
-          "Learner: ",
-          request.isSpecial
-            ? "SPECIAL REQUEST"
-            : learners.createFriendlyMarker(
-                request.learner,
-                x =>
-                  `${x.friendlyFullName} (grade = ${x.grade}) (homeroom = ${x.homeroom} ${x.homeroomTeacher})`
+      const header = container('<div class="card">')(
+        container('<div class="card-header">')("Helpful info"),
+        container('<div class="card-body">')(
+          container('<span class="badge badge-secondary">')(
+            `Step ${requestIndex[requestId].uiStep} (${stepToName(
+              requestIndex[requestId].uiStep
+            )})`
+          ),
+          container("<p>")(
+            requests.createFriendlyMarker(requestId, x => "Link to request")
+          ),
+          container("<p>")(
+            "Learner: ",
+            request.isSpecial
+              ? "SPECIAL REQUEST"
+              : learners.createFriendlyMarker(
+                  request.learner,
+                  x =>
+                    `${x.friendlyFullName} (grade = ${x.grade}) (homeroom = ${x.homeroom} ${x.homeroomTeacher})`
+                )
+          ),
+          request.annotation === ""
+            ? undefined
+            : container("<p>")("Information: ", request.annotation),
+          request.step === 3 || request.step === 2
+            ? ButtonWidget("go back a step", () => {
+                if (request.step === 2) {
+                  request.chosenBookings = []
+                }
+                request.step--
+                requests.state.updateRecord(request)
+                renavigate(["requests", requestId], false)
+              }).dom
+            : undefined,
+          request.step === 3 || request.step === 2
+            ? container("<p>")(
+                `${request.chosenBookings.length} booking(s) chosen`
               )
-        ),
-        request.step === 3 || request.step === 2
-          ? ButtonWidget("go back a step", () => {
-              if (request.step === 2) {
-                request.chosenBookings = []
-              }
-              request.step--
-              requests.state.updateRecord(request)
-              renavigate(["requests", requestId], false)
-            }).dom
-          : undefined,
-        request.step === 3 || request.step === 2
-          ? container("<p>")(
-              `${request.chosenBookings.length} booking(s) chosen`
-            )
-          : undefined
+            : undefined
+        )
       )
 
       // LOGIC: We use a toggle structure where:
@@ -797,20 +797,24 @@ function requestsNavigationScope(
         const uiStep01 = container("<div></div>")(
           header,
           generateBookerTable(bookerTableValues),
-          ButtonWidget("Move to step 2", () => {
-            requestChangeToStep2(
-              requestId,
-              bookerTableValues
-                .filter(booking => booking.status === "selected")
-                .map(booking => booking.id),
-              () => renavigate(["requests", requestId], false)
+          container('<div class="card">')(
+            container('<div class="card-body">')(
+              ButtonWidget("Move to step 2", () => {
+                requestChangeToStep2(
+                  requestId,
+                  bookerTableValues
+                    .filter(booking => booking.status === "selected")
+                    .map(booking => booking.id),
+                  () => renavigate(["requests", requestId], false)
+                )
+              }).dom,
+              generateEditBookingsButton({
+                bookingsInfo,
+                tutorIndex,
+                request
+              })
             )
-          }).dom,
-          generateEditBookingsButton({
-            bookingsInfo,
-            tutorIndex,
-            request
-          })
+          )
         )
         return uiStep01
       }
