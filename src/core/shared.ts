@@ -896,6 +896,17 @@ export const requestSubmissions = new Resource(
   "requestSubmissions",
   processResourceInfo(requestSubmissionsInfo)
 )
+export const resources: { [resourceName: string]: Resource } = {
+  tutors,
+  learners,
+  bookings,
+  matchings,
+  requests,
+  requestSubmissions
+}
+export function getResourceByName(name: string) {
+  return resources[name]
+}
 
 export async function initializeResources(): Promise<void> {
   await tutors.state.initialize()
@@ -912,11 +923,4 @@ VERY USEFUL FOR DEBUG
 
 */
 
-window["appDebug"] = () => ({
-  tutors,
-  learners,
-  bookings,
-  matchings,
-  requests,
-  requestSubmissions
-})
+window["appDebug"] = () => resources

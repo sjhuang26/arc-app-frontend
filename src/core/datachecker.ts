@@ -9,11 +9,15 @@ import {
   RecordCollection
 } from "./shared"
 
-export type DataCheckerTag =
-  | { resource: string; id: number; field: string; value: string; type: string }
-  | { resource: string; idResource: string }
-  | { resource: string; id: number; text: string; value: string; type: string }
-  | { resource: string; id: number }
+export type DataCheckerTag = {
+  resource?: string
+  id?: number
+  field?: string
+  value?: string
+  type?: string
+  idResource?: string
+  text?: string
+}
 export type DataCheckerProblem = {
   text: string
   tags: DataCheckerTag[]
@@ -131,7 +135,7 @@ function runDataCheckerSpecialCheck(
     problems
   }
 }
-function runDataChecker() {
+export function runDataChecker() {
   let numValidFields = 0
   const problems: DataCheckerProblem[] = []
   const resourceList = {

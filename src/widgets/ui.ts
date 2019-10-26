@@ -311,14 +311,14 @@ export function StringField(type: string, optional?: string): FormFieldType {
     makeWidget: () => FormStringInputWidget(type),
     validator(val: any) {
       if (typeof val !== "string") {
-        return "not text"
+        return "field should be text/string, but isn't"
       }
       if (!(optional === "optional")) {
         if (val === "") {
-          return "blank"
+          return "field shouldn't be blank"
         }
         if (val.trim() === "") {
-          return "blank (whitespace only)"
+          return "field shouldn't be blank (there is only whitespace)"
         }
       }
       return true
@@ -331,7 +331,7 @@ export function NumberField(type: string, optional?: string): FormFieldType {
     validator(val: any) {
       if (type === "number" || type === "datetime-local") {
         if (typeof val !== "number") {
-          return "not a number"
+          return "field isn't a number"
         }
         // TODO support optionals, which will require null support for numbers
         return true
@@ -360,14 +360,14 @@ export function SelectField(
     validator(val: any) {
       // TODO: proper select field validation
       if (typeof val !== "string") {
-        return "not text"
+        return "field isn't text/string"
       }
       // select fields are never optional
       if (val === "") {
-        return "blank"
+        return "field is blank"
       }
       if (val.trim() === "") {
-        return "blank (whitespace only)"
+        return "field is blank (only whitespace)"
       }
       return true
     }

@@ -12,7 +12,9 @@ import {
   Record,
   stringifyMod,
   alertError,
-  arrayEqual
+  arrayEqual,
+  resources,
+  getResourceByName
 } from "./shared"
 import {
   ButtonWidget,
@@ -26,6 +28,11 @@ import {
 } from "../widgets/ui"
 import { TableWidget } from "../widgets/Table"
 import { AskStatus, getResultOrFail, askServer } from "./server"
+import {
+  runDataChecker,
+  DataCheckerProblem,
+  DataCheckerTag
+} from "./datachecker"
 
 /*
 
@@ -81,6 +88,7 @@ const navigationBarString = `
         <a class="nav-link dropdown-toggle" data-toggle="dropdown">Other</a>
         <div class="dropdown-menu dropdown-menu-right">
             <a class="dropdown-item">About</a>
+            <a class="dropdown-item">Run datachecker</a>
             <a class="dropdown-item">Force refresh</a>
             <a class="dropdown-item">Testing mode</a>
         </div>
@@ -288,7 +296,87 @@ interface NavigationScope {
   generateMainContentPanel(navigationState: any[]): JQuery | null
   sidebar?: JQuery
 }
+function runDatacheckerNavigationScope(
+  renavigate: (newNavigationState: any[], keepScope: boolean) => void
+): NavigationScope {
+  function generateDatacheckerTag(tag: DataCheckerTag) {
+    const subtags: JQuery[] = []
 
+    if (tag.resource !== undefined) {
+      subtags.push(container("<span>")("Resource: ", tag.resource))
+    }
+    if (tag.id !== undefined) {
+      subtags.push(
+        container("<span>")(
+          "ID of item: ",
+          getResourceByName(tag.resource).createDataEditorMarker(
+            tag.id,
+            () => `Open (${tag.id})`
+          )
+        )
+      )
+    }
+    if (tag.idResource !== undefined) {
+      subtags.push(
+        container("<span>")("Resource that ID refers to: ", tag.idResource)
+      )
+    }
+    if (tag.text !== undefined) {
+      subtags.push(container("<span>")("Item: ", tag.text))
+    }
+    if (tag.field !== undefined) {
+      subtags.push(container("<span>")("Field: ", tag.field))
+    }
+    if (tag.value !== undefined) {
+      subtags.push(container("<span>")("Value: ", tag.value))
+    }
+    if (tag.type !== undefined) {
+      subtags.push(container("<span>")("Format of value: ", tag.type))
+    }
+    return container('<ul class="list-group">')(
+      subtags.map(subtag => container('<li class="list-group-item">')(subtag))
+    )
+  }
+  return {
+    generateMainContentPanel() {
+      const datacheckerResults = runDataChecker()
+      const table = TableWidget<{ problem: DataCheckerProblem; index: number }>(
+        ["Text", "Details"],
+        ({ problem, index }) => {
+          return [
+            problem.text,
+            ButtonWidget("Details", () => {
+              const { closeModal } = showModal(
+                `Datachecker problem #${index + 1}`,
+                container("<div>")(
+                  container('<p class="lead">')(problem.text),
+                  ...problem.tags.map(tag => generateDatacheckerTag(tag))
+                ),
+                bb => [bb("OK", "primary", () => closeModal())]
+              )
+            }).dom
+          ]
+        }
+      )
+      table.setAllValues(
+        datacheckerResults.problems.map((problem, index) => ({
+          problem,
+          index
+        }))
+      )
+      return container('<div class="overflow-auto">')(
+        $("<h1>Datachecker</h1>"),
+        container('<p class="lead">')(
+          `${datacheckerResults.numValidFields} valid fields found`
+        ),
+        container('<p class="lead">')(
+          `${datacheckerResults.problems.length} problems found`
+        ),
+        table.dom
+      )
+    }
+  }
+}
 function requestsNavigationScope(
   renavigate: (newNavigationState: any[], keepScope: boolean) => void
 ): NavigationScope {
@@ -1358,6 +1446,9 @@ export function rootWidget(): Widget {
         if (navigationState[0] === "attendance") {
           currentNavigationScope = attendanceNavigationScope(renavigate)
         }
+        if (navigationState[0] === "runDatachecker") {
+          currentNavigationScope = runDatacheckerNavigationScope(renavigate)
+        }
         generateSidebar(currentNavigationScope.sidebar, keepScope)
       }
       generateMainContentPanel(
@@ -1496,6 +1587,9 @@ export function rootWidget(): Widget {
         )
 
         // MISC
+        if (text == "Run datachecker") {
+          renavigate(["runDatachecker"], false)
+        }
         if (text == "After-school availability") {
           showAfterSchoolAvailablityModal()
         }
