@@ -229,6 +229,8 @@ async function requestChangeToStep4(requestId: number, onFinish: () => void) {
     // DELETE THE REFERENCE TO THE BOOKING & ADVANCE THE STEP
     r.step = 4
     r.chosenBooking = -1
+    // NOTE: a matching is designed in the system to automatically take precedence over any of the drop-ins.
+    // The drop-in array for the tutor will still include the mod.
     await requests.state.updateRecord(r)
   } catch (err) {
     alertError(err)
@@ -311,7 +313,7 @@ function requestsNavigationScope(
   }
 
   // MAJOR FUNCTIONS
-  function generatePotentialTable({
+  function generateEditBookingsTable({
     bookingsInfo,
     tutorIndex,
     request
@@ -320,19 +322,19 @@ function requestsNavigationScope(
     tutorIndex: TutorIndex
     request: Record
   }): JQuery {
-    type PotentialTableRowArgs = {
+    type TableRow = {
       tutorId: number
-      mods: PotentialTableRowModArgs[]
+      mods: TableRowMod[]
     }
-    type PotentialTableRowModArgs = {
+    type TableRowMod = {
       mod: number
       isPref: boolean
       isAlreadyBooked: boolean
       isAlreadyDropIn: boolean
     }
-    const potentialTable = TableWidget(
+    const table = TableWidget(
       ["Tutor", "Book for mods..."],
-      ({ tutorId, mods }: PotentialTableRowArgs) => {
+      ({ tutorId, mods }: TableRow) => {
         const buttonsDom = $("<div></div>")
         for (const { mod, isPref, isAlreadyBooked, isAlreadyDropIn } of mods) {
           const modLabel =
@@ -365,10 +367,11 @@ function requestsNavigationScope(
         ]
       }
     )
-    const potentialTableValues: PotentialTableRowArgs[] = []
+    const tableValues: TableRow[] = []
     for (const tutor of Object.values(tutorIndex)) {
-      const modResults: PotentialTableRowModArgs[] = []
+      const modResults: TableRowMod[] = []
       for (const mod of request.mods) {
+        // ignore tutors who are already matched
         if (!tutor.matchedMods.includes(mod)) {
           const tutorRecord = tutors.state.getRecordOrFail(tutor.id)
           if (tutorRecord.mods.includes(mod)) {
@@ -382,14 +385,14 @@ function requestsNavigationScope(
         }
       }
       if (modResults.length > 0 && tutor.bookedMods.length === 0) {
-        potentialTableValues.push({
+        tableValues.push({
           tutorId: tutor.id,
           mods: modResults
         })
       }
     }
-    potentialTable.setAllValues(potentialTableValues)
-    return potentialTable.dom
+    table.setAllValues(tableValues)
+    return table.dom
   }
   async function attemptRequestSubmissionConversion(
     record: Record
@@ -578,7 +581,7 @@ function requestsNavigationScope(
     return ButtonWidget("Edit bookings", () => {
       showModal(
         "Edit bookings",
-        generatePotentialTable({
+        generateEditBookingsTable({
           bookingsInfo,
           tutorIndex,
           request
@@ -853,13 +856,14 @@ function scheduleEditNavigationScope(
         tutorModStatusIndex[tutor.id].modStatus[mod - 1] = "dropIn"
       }
     }
-    // preferred mods
+    // mod status: preferred mods
     for (const mod of tutor.modsPref) {
       tutorModStatusIndex[tutor.id].modStatus[mod - 1] += "Pref"
     }
   }
   for (const booking of Object.values(bookingRecords)) {
     if (booking.status !== "ignore" && booking.status !== "rejected") {
+      // mod status: booked
       tutorModStatusIndex[booking.tutor].modStatus[booking.mod - 1] = [
         "booked",
         booking.id
@@ -867,6 +871,7 @@ function scheduleEditNavigationScope(
     }
   }
   for (const matching of Object.values(matchingRecords)) {
+    // mod status: matched
     tutorModStatusIndex[matching.tutor].modStatus[matching.mod - 1] = [
       "matched",
       matching.id

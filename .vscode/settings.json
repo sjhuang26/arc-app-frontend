@@ -1,4 +1,9 @@
 {
   "editor.formatOnSave": true,
-  "prettier.singleQuote": true
+  "prettier.singleQuote": true,
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/bower_components": true,
+    "arc-app-frontend-server/**": true
+  }
 }
