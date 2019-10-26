@@ -133,7 +133,6 @@ function showStep3Messager(bookingId: number) {
     MessageTemplateWidget(
       `This is to confirm that starting now, you will be tutoring ${
         l === -1 ? "<SPECIAL REQUEST -- FILL IN INFO>" : l.friendlyFullName
-      }
       } in subject ${r.subject} during mod ${stringifyMod(b.mod)}.`
     ).dom
   )
@@ -229,7 +228,7 @@ async function requestChangeToStep4(requestId: number, onFinish: () => void) {
         tutor: b.tutor,
         subject: r.subject,
         mod: b.mod,
-        specialRoom: r.specialRoom,
+        annotation: r.annotation,
         id: -1,
         date: -1
       })
