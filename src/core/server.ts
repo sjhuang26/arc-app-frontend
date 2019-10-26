@@ -32,6 +32,9 @@ function failAfterFiveSeconds<T>(p: Promise<T>): Promise<T> {
 
 export function convertServerStringToAskFinished<T>(str: any): AskFinished<T> {
   try {
+    if (str === null) {
+      throw new Error("server response was NULL; try refreshing the page")
+    }
     if (typeof str !== "string") {
       throw new Error("server response not in correct type")
     } else {
