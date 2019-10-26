@@ -6,7 +6,8 @@ import {
   tutors,
   requestSubmissions,
   Record,
-  RecordCollection
+  RecordCollection,
+  getResourceByName
 } from "./shared"
 
 export type DataCheckerTag = {
@@ -78,7 +79,7 @@ function runDataCheckerSpecialCheck(
       })
     }
     // is modsPref a subset of mods?
-    if (dataCheckerUtilCheckSubset(dropInMods, mods)) {
+    if (dataCheckerUtilCheckSubset(modsPref, mods)) {
       ++numValidFields
     } else {
       problems.push({
@@ -102,7 +103,7 @@ function runDataCheckerSpecialCheck(
       })
     }
     // is matchedMods a subset of mods?
-    if (dataCheckerUtilCheckSubset(dropInMods, mods)) {
+    if (dataCheckerUtilCheckSubset(matchedMods, mods)) {
       ++numValidFields
     } else {
       problems.push({
@@ -168,9 +169,9 @@ export function runDataChecker() {
           })
         } else {
           // case: check IDs
-          const records2 = resourceList[
+          const records2 = getResourceByName(
             validationResult.resource
-          ].getRecordCollectionOrFail()
+          ).state.getRecordCollectionOrFail()
           if (records2[record[field.name]] === undefined) {
             // invalid ID
             problems.push({

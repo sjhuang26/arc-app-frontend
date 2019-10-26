@@ -14,7 +14,8 @@ import {
   alertError,
   arrayEqual,
   resources,
-  getResourceByName
+  getResourceByName,
+  forceRefreshAllResources
 } from "./shared"
 import {
   ButtonWidget,
@@ -531,7 +532,8 @@ function requestsNavigationScope(
         mods: record.mods,
         subject: record.subject,
         specialRoom: record.specialRoom,
-        step: 1
+        step: 1,
+        chosenBooking: -1
       })
     )
 
@@ -1604,28 +1606,25 @@ export function rootWidget(): Widget {
               bb => [],
               true
             )
-            await tutors.state.forceRefresh()
-            await learners.state.forceRefresh()
-            await bookings.state.forceRefresh()
-            await matchings.state.forceRefresh()
-            await requests.state.forceRefresh()
-            await requestSubmissions.state.forceRefresh()
+            await forceRefreshAllResources()
             renavigate(navigationState, false)
             closeModal()
           })()
         }
         if (text == "Testing mode") {
-          window["APP_DEBUG_MOCK"] = 1
-          tutors.state.forceRefresh()
-          learners.state.forceRefresh()
-          bookings.state.forceRefresh()
-          matchings.state.forceRefresh()
-          requests.state.forceRefresh()
-          requestSubmissions.state.forceRefresh()
-          for (const window of state.tiledWindows.val) {
-            window.onLoad.trigger()
-          }
-          showTestingModeWarning()
+          ;(async () => {
+            const { closeModal } = showModal(
+              "Loading testing mode...",
+              "",
+              bb => [],
+              true
+            )
+            window["APP_DEBUG_MOCK"] = 1
+            forceRefreshAllResources()
+            showTestingModeWarning()
+            renavigate([], false)
+            closeModal()
+          })()
         }
       })
 

@@ -11,7 +11,8 @@ import {
   NumberArrayField,
   createMarkerLink,
   JsonField,
-  showModal
+  showModal,
+  IdField
 } from "../widgets/ui"
 import { TableWidget } from "../widgets/Table"
 
@@ -195,14 +196,6 @@ export class ResourceObservable extends ObservableState<
     })
     this.endpoint = endpoint
   }
-  async initialize() {
-    // If this fails, there will be some cascading failure throughout the app, but only when the resource is actually used. This prevents catastrophic failure the moment a resource fails.
-    const newVal: AskFinished<
-      RecordCollection
-    > = await this.endpoint.retrieveAll()
-    this.changeTo(newVal)
-    return newVal
-  }
 
   getRecordOrFail(id: number) {
     const val = this.getLoadedOrFail()
@@ -225,13 +218,6 @@ export class ResourceObservable extends ObservableState<
       throw new Error("resource is not loaded: " + this.endpoint.name)
     }
     return this.val.val
-  }
-
-  async forceRefresh(): Promise<void> {
-    const newVal: AskFinished<
-      RecordCollection
-    > = await this.endpoint.retrieveAll()
-    this.changeTo(newVal)
   }
 
   getRecordCollectionOrFail(): RecordCollection {
@@ -657,8 +643,8 @@ export function makeBasicStudentConfig(): [string, FormFieldType][] {
     ["friendlyFullName", StringField("text")],
     ["grade", NumberField("number")],
     ["studentId", NumberField("number")],
-    ["email", StringField("email")],
-    ["phone", StringField("string")],
+    ["email", StringField("email", "optional")],
+    ["phone", StringField("text", "optional")],
     [
       "contactPref",
       SelectField(["email", "phone", "either"], ["Email", "Phone", "Either"])
@@ -770,12 +756,12 @@ const learnersInfo: UnprocessedResourceInfo = {
 }
 const requestsInfo: UnprocessedResourceInfo = {
   fields: [
-    ["learner", NumberField("id")],
+    ["learner", IdField("learners")],
     ["mods", NumberArrayField("number")],
     ["subject", StringField("text")],
     ["specialRoom", StringField("text", "optional")],
     ["step", NumberField("number")],
-    ["chosenBooking", NumberField("id")]
+    ["chosenBooking", IdField("bookings", "optional")]
   ],
   fieldNameMap,
   tableFieldTitles: ["Learner", "Subject", "Mods"],
@@ -792,8 +778,8 @@ const requestsInfo: UnprocessedResourceInfo = {
 
 const bookingsInfo: UnprocessedResourceInfo = {
   fields: [
-    ["request", NumberField("id")],
-    ["tutor", NumberField("id")],
+    ["request", IdField("requests")],
+    ["tutor", IdField("tutors")],
     ["mod", NumberField("number")],
     [
       "status",
@@ -826,8 +812,8 @@ const bookingsInfo: UnprocessedResourceInfo = {
 
 const matchingsInfo: UnprocessedResourceInfo = {
   fields: [
-    ["learner", StringField("text")],
-    ["tutor", StringField("text")],
+    ["learner", IdField("learners")],
+    ["tutor", IdField("tutors")],
     ["subject", StringField("text")],
     ["mod", NumberField("number")],
     ["specialRoom", StringField("text", "optional")]
@@ -905,18 +891,29 @@ export const resources: { [resourceName: string]: Resource } = {
   requestSubmissions
 }
 export function getResourceByName(name: string) {
+  if (resources[name] === undefined) {
+    throw new Error("getResourceByName: " + JSON.stringify({ name }))
+  }
   return resources[name]
 }
 
-export async function initializeResources(): Promise<void> {
-  await tutors.state.initialize()
-  await learners.state.initialize()
-  await bookings.state.initialize()
-  await matchings.state.initialize()
-  await requests.state.initialize()
-  await requestSubmissions.state.initialize()
+export async function forceRefreshAllResources(): Promise<void> {
+  const result = await askServer([
+    "command",
+    "retrieveMultiple",
+    Object.keys(resources)
+  ])
+  for (const resource of Object.values(resources)) {
+    if (result.status === AskStatus.ERROR) {
+      resource.state.changeTo(result)
+    } else {
+      resource.state.changeTo({
+        status: AskStatus.LOADED,
+        val: result.val[resource.name]
+      })
+    }
+  }
 }
-
 /*
 
 VERY USEFUL FOR DEBUG

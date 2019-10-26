@@ -160,12 +160,114 @@ export type AskLoaded<T> = {
   val: T
 }
 
+async function realServer(args: any[]): Promise<string> {
+  function getGoogleAppsScriptEndpoint() {
+    if (
+      window["google"] === undefined ||
+      window["google"].script === undefined
+    ) {
+      // This will be displayed to the user
+      throw "You should turn on testing mode. Click OTHER >> TESTING MODE."
+    }
+    return window["google"].script.run
+  }
+  let result: any = "Mysterious error"
+  try {
+    result = await new Promise((res, rej) => {
+      getGoogleAppsScriptEndpoint()
+        .withFailureHandler(rej)
+        .withSuccessHandler(res)
+        .onClientAsk(args)
+    })
+    // NOTE: an "error: true" response is still received by the client through withSuccessHandler().
+  } catch (err) {
+    result = JSON.stringify({
+      error: true,
+      val: null,
+      message: stringifyError(err)
+    })
+  }
+  if (typeof result !== "string") {
+    result = JSON.stringify({
+      error: true,
+      val: null,
+      message: stringifyError("not a string: " + String(result))
+    })
+  }
+  return result
+}
+
+async function mockServer(args: any[]): Promise<any> {
+  let rawResult: any = "Mysterious error"
+
+  // only for resources so far
+  try {
+    const mockArgs = JSON.parse(JSON.stringify(args))
+
+    if (args[0] === "command") {
+      if (args[1] === "syncDataFromForms") {
+        throw new Error(
+          "command syncDataFromForms is not supported on the testing server"
+        )
+      } else if (args[1] === "recalculateAttendance") {
+        throw new Error(
+          "command recalculateAttendance is not supported on the testing server"
+        )
+      } else if (args[1] === "generateSchedule") {
+        throw new Error(
+          "command generateSchedule is not supported on the testing server"
+        )
+      } else if (args[1] === "retrieveMultiple") {
+        const resourceNames: string[] = args[2]
+        rawResult = {}
+        for (const resourceName of resourceNames) {
+          rawResult[resourceName] =
+            mockResourceServerEndpoints[resourceName].contents
+        }
+      } else {
+        throw new Error(
+          `command [unknown] is not supported on the testing server ${JSON.stringify(
+            {
+              args
+            }
+          )}`
+        )
+      }
+    } else {
+      rawResult = await mockResourceServerEndpoints[
+        mockArgs[0]
+      ].processClientAsk(mockArgs.slice(1))
+    }
+    return JSON.stringify(mockSuccess(rawResult))
+  } catch (err) {
+    rawResult = err
+  }
+
+  return JSON.stringify(mockError(rawResult))
+}
+
 // The point of the mock server is for demos, where we don't want to link to the real spreadsheet with the real data.
+
+function mockSuccess(val: any): ServerResponse<any> {
+  return {
+    error: false,
+    message: null,
+    val
+  }
+}
+
+function mockError(message: string): ServerResponse<any> {
+  return {
+    error: true,
+    message,
+    val: null
+  }
+}
 
 class MockResourceServerEndpoint {
   resource: () => Resource
-  contents: RecordCollection
-  nextKey: number = 1000 // default ID is very high for testing purposes
+  public contents: RecordCollection
+  nextKey: number = 1000 // default ID is an arbitrary high number for testing purposes
 
   constructor(resource: () => Resource, contents: RecordCollection) {
     // IMPORTANT: the resource field is ":() => Resource" intentionally.
@@ -178,30 +280,14 @@ class MockResourceServerEndpoint {
     this.contents = contents
   }
 
-  success(val: any): ServerResponse<any> {
-    return {
-      error: false,
-      message: null,
-      val
-    }
-  }
-
-  error(message: string): ServerResponse<any> {
-    return {
-      error: true,
-      message,
-      val: null
-    }
-  }
-
-  processClientAsk(args: any[]): ServerResponse<any> {
+  processClientAsk(args: any[]): any {
     if (args[0] === "retrieveAll") {
-      return this.success(this.contents)
+      return this.contents
     }
     if (args[0] === "update") {
       this.contents[String(args[1].id)] = args[1]
       onClientNotification(["update", this.resource().name, args[1]])
-      return this.success(null)
+      return null
     }
     if (args[0] === "create") {
       if (args[1].date === -1) {
@@ -213,32 +299,22 @@ class MockResourceServerEndpoint {
       }
       this.contents[String(args[1].id)] = args[1]
       onClientNotification(["create", this.resource().name, args[1]])
-      return this.success(this.contents[String(args[1].id)])
+      return this.contents[String(args[1].id)]
     }
     if (args[0] === "delete") {
       delete this.contents[String(args[1])]
       onClientNotification(["delete", this.resource().name, args[1]])
-      return this.success(null)
+      return null
     }
     throw new Error("args not matched")
-  }
-
-  async replyToClientAsk(args: any[]): Promise<ServerResponse<any>> {
-    return new Promise((res, rej) => {
-      setTimeout(() => {
-        try {
-          res(this.processClientAsk(args))
-        } catch (v) {
-          rej(v)
-        }
-      }, 100) // fake a small delay
-    })
   }
 }
 
 // You can edit this to add fake demo data, if you want.
 
-export const mockResourceServerEndpoints = {
+export const mockResourceServerEndpoints: {
+  [resourceName: string]: MockResourceServerEndpoint
+} = {
   tutors: new MockResourceServerEndpoint(() => tutors, {
     "1561605140223": {
       id: 1561605140223,
@@ -341,91 +417,4 @@ export const mockResourceServerEndpoints = {
       status: "unchecked"
     }
   })
-}
-
-async function realServer(args: any[]): Promise<string> {
-  function getGoogleAppsScriptEndpoint() {
-    if (
-      window["google"] === undefined ||
-      window["google"].script === undefined
-    ) {
-      // This will be displayed to the user
-      throw "You should turn on testing mode. Click OTHER >> TESTING MODE."
-    }
-    return window["google"].script.run
-  }
-  let result: any = "Mysterious error"
-  try {
-    result = await new Promise((res, rej) => {
-      getGoogleAppsScriptEndpoint()
-        .withFailureHandler(rej)
-        .withSuccessHandler(res)
-        .onClientAsk(args)
-    })
-    // NOTE: an "error: true" response is still received by the client through withSuccessHandler().
-  } catch (err) {
-    result = JSON.stringify({
-      error: true,
-      val: null,
-      message: stringifyError(err)
-    })
-  }
-  if (typeof result !== "string") {
-    result = JSON.stringify({
-      error: true,
-      val: null,
-      message: stringifyError("not a string: " + String(result))
-    })
-  }
-  return result
-}
-
-async function mockServer(args: any[]): Promise<any> {
-  let result: any = "Mysterious error"
-
-  // only for resources so far
-  try {
-    const mockArgs = JSON.parse(JSON.stringify(args))
-
-    if (args[0] === "command") {
-      if (args[1] === "syncDataFromForms") {
-        throw new Error(
-          "command syncDataFromForms is not supported on the testing server"
-        )
-      }
-      if (args[1] === "recalculateAttendance") {
-        throw new Error(
-          "command recalculateAttendance is not supported on the testing server"
-        )
-      }
-      if (args[1] === "generateSchedule") {
-        throw new Error(
-          "command generateSchedule is not supported on the testing server"
-        )
-      }
-      throw new Error(
-        "command [unknown] is not supported on the testing server"
-      )
-    }
-    result = JSON.stringify(
-      await mockResourceServerEndpoints[mockArgs[0]].replyToClientAsk(
-        mockArgs.slice(1)
-      )
-    )
-  } catch (err) {
-    result = JSON.stringify({
-      error: true,
-      val: null,
-      message: stringifyError(err)
-    })
-  }
-
-  if (typeof result !== "string") {
-    result = JSON.stringify({
-      error: true,
-      val: null,
-      message: stringifyError("not a string: " + String(result))
-    })
-  }
-  return result
 }

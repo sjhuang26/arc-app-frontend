@@ -340,10 +340,12 @@ export function NumberField(type: string, optional?: string): FormFieldType {
     }
   }
 }
-export function IdField(resource: string): FormFieldType {
+export function IdField(resource: string, optional?: string): FormFieldType {
   return {
     makeWidget: () => FormNumberInputWidget("number"),
     validator(val: any) {
+      if (typeof val !== "number") return "ID isn't a number"
+      if (optional === "optional" && val === -1) return true
       return {
         resource,
         id: val
