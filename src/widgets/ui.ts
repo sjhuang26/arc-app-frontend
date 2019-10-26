@@ -88,14 +88,20 @@ export function ButtonWidget(
       $("<button></button>")
         .text(content)
         .addClass("btn btn-" + variant)
-        .click(onClick)
+        .click(e => {
+          e.preventDefault()
+          onClick()
+        })
     )
   } else {
     return DomWidget(
       $("<button></button>")
         .append(content)
         .addClass("btn btn-" + variant)
-        .click(onClick)
+        .click(e => {
+          e.preventDefault()
+          onClick()
+        })
     )
   }
 }
@@ -179,7 +185,7 @@ export function showModal(
 export type FormValueWidget<T> = Widget & {
   getValue(): any
   setValue(newVal: T): JQuery
-  onChange(doThis: (newVal: T) => void): void
+  onChange(doThis: (newVal: T) => void, useInputEvent?: boolean): void
 }
 
 export function FormStringInputWidget(type: string): FormValueWidget<string> {
@@ -192,8 +198,12 @@ export function FormStringInputWidget(type: string): FormValueWidget<string> {
     setValue(newVal: string): JQuery {
       return dom.val(newVal)
     },
-    onChange(doThis: (newVal: string) => void): void {
-      dom.change(() => doThis.call(null, dom.val() as string))
+    onChange(doThis: (newVal: string) => void, useInputEvent?: boolean): void {
+      if (useInputEvent) {
+        dom.on("input", () => doThis.call(null, dom.val() as string))
+      } else {
+        dom.change(() => doThis.call(null, dom.val() as string))
+      }
     }
   }
 }
@@ -241,10 +251,6 @@ export function FormNumberInputWidget(type: string): FormValueWidget<number> {
   if (type === "datetime-local") {
     dom = $(`<input class="form-control" type="datetime-local">`)
   }
-  if (type === "id") {
-    // TODO: create a resource selection dropdown, or at least a name search
-    dom = $(`<input class="form-control" type="number">`)
-  }
   function getVal(): number {
     if (type == "datetime-local") {
       // a hack to get around Typescript types
@@ -270,6 +276,34 @@ export function FormNumberInputWidget(type: string): FormValueWidget<number> {
     },
     onChange(doThis) {
       dom.change(doThis.call(null, getVal()))
+    }
+  }
+}
+
+export function FormIdInputWidget(
+  resource: string,
+  isOptional: boolean
+): FormValueWidget<number> {
+  const input = $(`<input class="form-control" type="number">`)
+  const dom = container("<div>")(
+    input,
+    ButtonWidget("Change", () => {
+      showModal("Edit ID", String(resource), bb => [bb("Close", "primary")])
+    }).dom
+  )
+  function getVal(): number {
+    return Number(input.val())
+  }
+  return {
+    dom,
+    getValue(): number {
+      return getVal()
+    },
+    setValue(val: number): JQuery {
+      return input.val(val)
+    },
+    onChange(doThis) {
+      input.change(doThis.call(null, getVal()))
     }
   }
 }
@@ -340,17 +374,19 @@ export function NumberField(type: string, optional?: string): FormFieldType {
     }
   }
 }
-export function IdField(resource: string, optional?: string): FormFieldType {
+export function IdField(resource?: string, optional?: string): FormFieldType {
   return {
-    makeWidget: () => FormNumberInputWidget("number"),
+    makeWidget: () => FormIdInputWidget(resource, optional === "optional"),
     validator(val: any) {
       if (typeof val !== "number") return "ID isn't a number"
-      if (optional === "optional" && val === -1) return true
+      if (resource === undefined || (optional === "optional" && val === -1))
+        return true
       return {
         resource,
         id: val
       }
-    }
+    },
+    isIdField: true
   }
 }
 export function SelectField(
@@ -402,15 +438,9 @@ export type FieldValidatorIdResult = {
 export type FormFieldType = {
   makeWidget: () => FormValueWidget<any>
   validator: (val: any) => FieldValidatorResult
+  isIdField?: boolean
 }
 
-export function FormSubmitWidget(text: string): Widget {
-  return DomWidget(
-    $('<button class="btn btn-outline-success type="submit"></button>').text(
-      text
-    )
-  )
-}
 export function FormSelectWidget(
   options: string[],
   optionTitles: string[]
@@ -428,8 +458,12 @@ export function FormSelectWidget(
     setValue(val: string): JQuery {
       return dom.val(val)
     },
-    onChange(doThis: (newVal: string) => void): void {
-      dom.change(() => doThis.call(null, dom.val() as string))
+    onChange(doThis: (newVal: string) => void, useInputEvent?: boolean): void {
+      if (useInputEvent) {
+        dom.on("input", () => doThis.call(null, dom.val() as string))
+      } else {
+        dom.change(() => doThis.call(null, dom.val() as string))
+      }
     }
   }
   return k
@@ -480,17 +514,6 @@ export function FormToggleWidget(
     }
   }
   return k
-}
-export function SearchItemWidget(onSubmit: () => void): Widget {
-  return DomWidget(
-    $('<form class="form-inline"></form>')
-      .append(FormStringInputWidget("search").dom)
-      .append(FormSubmitWidget("Search").dom)
-      .submit(ev => {
-        ev.preventDefault()
-        onSubmit.call(null)
-      })
-  )
 }
 
 export function createMarkerLink(text: string, onClick: () => void): JQuery {

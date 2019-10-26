@@ -12,7 +12,9 @@ import {
   createMarkerLink,
   JsonField,
   showModal,
-  IdField
+  IdField,
+  FormStringInputWidget,
+  FormSelectWidget
 } from "../widgets/ui"
 import { TableWidget } from "../widgets/Table"
 
@@ -379,10 +381,10 @@ export class Resource {
     }
   }
 
-  async makeTiledCreateWindow(): Promise<void> {
+  makeTiledCreateWindow(): void {
     let errorMessage: string = ""
     try {
-      await this.state.getRecordCollectionOrFail()
+      this.state.getRecordCollectionOrFail()
       const windowLabel = "Create new " + this.info.title
 
       const form = this.makeFormWidget()
@@ -413,30 +415,70 @@ export class Resource {
     }
   }
 
-  async makeTiledViewAllWindow(): Promise<void> {
-    let recordCollection: RecordCollection = null
+  makeSearchWidget(): Widget {
+    const info = this.info
+    function doSearch(): void {
+      if (searchWidget.getValue().trim() === "") {
+        table.setAllValues(Object.keys(recordCollection).map(x => Number(x)))
+        return
+      }
+      const options = {
+        id: ["id"],
+        shouldSort: true,
+        threshold: 0.6,
+        location: 0,
+        distance: 100,
+        maxPatternLength: 32,
+        minMatchCharLength: 1,
+        keys: ["searchableContent"]
+      }
+
+      const fuse = new window["Fuse"](
+        Object.values(recordCollection).map(record => ({
+          id: record.id,
+          searchableContent: info.makeSearchableContent(record).join(" ")
+        })),
+        options
+      )
+      const results = fuse.search(searchWidget.getValue())
+      console.log(results)
+      table.setAllValues(results.map(x => Number(x)))
+    }
+    const recordCollection = this.state.getRecordCollectionOrFail()
+
+    const table = TableWidget(
+      this.info.tableFieldTitles.concat("Pick"),
+      (id: number) =>
+        this.info.makeTableRowContent(recordCollection[id]).concat(
+          ButtonWidget("Pick", () => {
+            this.makeTiledEditWindow(id)
+          }).dom
+        )
+    )
+
+    const searchWidget = FormStringInputWidget("string")
+    searchWidget.onChange(() => doSearch(), true)
+
+    doSearch()
+
+    return DomWidget(
+      container("<div>")(
+        searchWidget.dom.attr("placeholder", "Search..."),
+        table.dom
+      )
+    )
+  }
+
+  makeTiledViewAllWindow(): void {
     let errorMessage: string = ""
     try {
-      recordCollection = await this.state.getRecordCollectionOrFail()
-
-      const table = TableWidget(
-        this.info.tableFieldTitles.concat("View & edit"),
-        (record: Record) =>
-          this.info.makeTableRowContent(record).concat(
-            ButtonWidget("View & edit", () => {
-              this.makeTiledEditWindow(record.id)
-            }).dom
-          )
-      )
-      table.setAllValues(recordCollection)
-
       const windowLabel = "View all " + this.info.pluralTitle
 
       showModal(
         windowLabel,
         container("<div></div>")(
           container("<h1></h1>")(windowLabel),
-          table.dom
+          this.makeSearchWidget().dom
         ),
         bb => [
           bb("Create", "secondary", () => this.makeTiledCreateWindow(), true),
@@ -591,6 +633,17 @@ export type ResourceInfo = {
   fields: ResourceFieldInfo[]
   tableFieldTitles: string[]
   makeTableRowContent: (record: Record) => (JQuery | string)[]
+  makeSearchableContent: (record: Record) => string[]
+  title: string
+  pluralTitle: string
+  makeLabel: (record: Record) => string
+}
+export type UnprocessedResourceInfo = {
+  fields: [string, FormFieldType][] // name, string/number, type
+  fieldNameMap: FieldNameMap // name | [name, info?]
+  tableFieldTitles: string[]
+  makeTableRowContent: (record: Record) => (JQuery | string)[]
+  makeSearchableContent: (record: Record) => string[]
   title: string
   pluralTitle: string
   makeLabel: (record: Record) => string
@@ -599,10 +652,7 @@ export type ResourceInfo = {
 export function processResourceInfo(
   conf: UnprocessedResourceInfo
 ): ResourceInfo {
-  conf.fields.push(
-    ["id", NumberField("number")],
-    ["date", NumberField("datetime-local")]
-  )
+  conf.fields.push(["id", IdField()], ["date", NumberField("number")])
   let fields: ResourceFieldInfo[] = []
   for (const [name, type] of conf.fields) {
     const x = conf.fieldNameMap[name]
@@ -616,6 +666,7 @@ export function processResourceInfo(
   return {
     fields,
     makeTableRowContent: conf.makeTableRowContent,
+    makeSearchableContent: conf.makeSearchableContent,
     title: conf.title,
     pluralTitle: conf.pluralTitle,
     tableFieldTitles: conf.tableFieldTitles,
@@ -624,16 +675,6 @@ export function processResourceInfo(
 }
 
 export type FieldNameMap = { [name: string]: string | [string, string] }
-
-export type UnprocessedResourceInfo = {
-  fields: [string, FormFieldType][] // name, string/number, type
-  fieldNameMap: FieldNameMap // name | [name, info?]
-  tableFieldTitles: string[]
-  makeTableRowContent: (record: Record) => (JQuery | string)[]
-  title: string
-  pluralTitle: string
-  makeLabel: (record: Record) => string
-}
 
 export function makeBasicStudentConfig(): [string, FormFieldType][] {
   return [
@@ -662,14 +703,8 @@ const fieldNameMap: FieldNameMap = {
   friendlyName: "Friendly name",
   friendlyFullName: "Friendly full name",
   grade: ["Grade", "A number from 9-12"],
-  learner: [
-    "Learner",
-    "This is an ID. You usually will not need to edit this by hand."
-  ],
-  tutor: [
-    "Tutor",
-    "This is an ID. You usually will not need to edit this by hand."
-  ],
+  learner: "Learner",
+  tutor: "Tutor",
   attendance: ["Attendance data", "Do not edit this by hand."],
   status: "Status",
   mods: [
@@ -699,12 +734,12 @@ const fieldNameMap: FieldNameMap = {
     "Special tutoring room",
     `Leave blank if the student isn't in special tutoring`
   ],
-  id: ["ID", `Do not modify unless you really know what you're doing!`],
-  date: ["Date", "Date of creation -- do not change"],
+  id: "ID",
+  date: ["Date", "Date of creation (do not change)"],
   homeroom: "Homeroom",
   homeroomTeacher: "Homeroom teacher",
   step: ["Step", "A number 1-4."],
-  chosenBooking: ["Chosen booking", "The ID of the booking that was chosen"],
+  chosenBooking: "Chosen booking",
   afterSchoolAvailability: "After-school availability",
   attendanceAnnotation: "Attendance annotation",
   additionalHours: [
@@ -738,6 +773,12 @@ const tutorsInfo: UnprocessedResourceInfo = {
     generateStringOfMods(record.mods, record.modsPref),
     record.subjectList
   ],
+  makeSearchableContent: record => [
+    tutors.createLabel(record.id, x => x.friendlyFullName),
+    String(record.grade),
+    generateStringOfMods(record.mods, record.modsPref),
+    record.subjectList
+  ],
   title: "tutor",
   pluralTitle: "tutors",
   makeLabel: record => record.friendlyFullName
@@ -748,6 +789,10 @@ const learnersInfo: UnprocessedResourceInfo = {
   tableFieldTitles: ["Name", "Grade"],
   makeTableRowContent: record => [
     learners.createDataEditorMarker(record.id, x => x.friendlyFullName),
+    record.grade
+  ],
+  makeSearchableContent: record => [
+    learners.createLabel(record.id, x => x.friendlyFullName),
     record.grade
   ],
   title: "learner",
@@ -767,6 +812,11 @@ const requestsInfo: UnprocessedResourceInfo = {
   tableFieldTitles: ["Learner", "Subject", "Mods"],
   makeTableRowContent: record => [
     learners.createDataEditorMarker(record.learner, x => x.friendlyFullName),
+    record.subject,
+    record.mods.join(", ")
+  ],
+  makeSearchableContent: record => [
+    learners.createFriendlyMarker(record.learner, x => x.friendlyFullName),
     record.subject,
     record.mods.join(", ")
   ],
@@ -800,6 +850,15 @@ const bookingsInfo: UnprocessedResourceInfo = {
     record.mod,
     record.status
   ],
+  makeSearchableContent: record => [
+    learners.createLabel(
+      requests.state.getRecordOrFail(record.request).learner,
+      x => x.friendlyFullName
+    ),
+    tutors.createLabel(record.tutor, x => x.friendlyFullName),
+    record.mod,
+    record.status
+  ],
   title: "booking",
   pluralTitle: "bookings",
   makeLabel: record =>
@@ -827,6 +886,13 @@ const matchingsInfo: UnprocessedResourceInfo = {
     record.subject,
     record.status
   ],
+  makeSearchableContent: record => [
+    learners.createLabel(record.learner, x => x.friendlyFullName),
+    tutors.createLabel(record.tutor, x => x.friendlyFullName),
+    record.mod,
+    record.subject,
+    record.status
+  ],
   title: "matching",
   pluralTitle: "matchings",
   makeLabel: record =>
@@ -846,6 +912,11 @@ const requestSubmissionsInfo: UnprocessedResourceInfo = {
   fieldNameMap,
   tableFieldTitles: ["Name", "Mods", "Subject"],
   makeTableRowContent: record => [
+    record.friendlyFullName,
+    record.mods.join(", "),
+    record.subject
+  ],
+  makeSearchableContent: record => [
     record.friendlyFullName,
     record.mods.join(", "),
     record.subject
