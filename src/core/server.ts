@@ -240,7 +240,7 @@ async function mockServer(args: any[]): Promise<any> {
     }
     return JSON.stringify(mockSuccess(rawResult))
   } catch (err) {
-    rawResult = err
+    rawResult = stringifyError(err)
   }
 
   return JSON.stringify(mockError(rawResult))

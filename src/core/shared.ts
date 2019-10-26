@@ -415,7 +415,7 @@ export class Resource {
     }
   }
 
-  makeSearchWidget(): Widget {
+  makeSearchWidget(actionText: string, action: (id: number) => void): Widget {
     const info = this.info
     function doSearch(): void {
       if (searchWidget.getValue().trim() === "") {
@@ -442,18 +442,16 @@ export class Resource {
       )
       const results = fuse.search(searchWidget.getValue())
       console.log(results)
-      table.setAllValues(results.map(x => Number(x)))
+      table.setAllValues(results.map((x: string) => Number(x)))
     }
     const recordCollection = this.state.getRecordCollectionOrFail()
 
     const table = TableWidget(
-      this.info.tableFieldTitles.concat("Pick"),
+      this.info.tableFieldTitles.concat(actionText),
       (id: number) =>
-        this.info.makeTableRowContent(recordCollection[id]).concat(
-          ButtonWidget("Pick", () => {
-            this.makeTiledEditWindow(id)
-          }).dom
-        )
+        this.info
+          .makeTableRowContent(recordCollection[id])
+          .concat(ButtonWidget(actionText, () => action(id)).dom)
     )
 
     const searchWidget = FormStringInputWidget("string")
@@ -478,7 +476,9 @@ export class Resource {
         windowLabel,
         container("<div></div>")(
           container("<h1></h1>")(windowLabel),
-          this.makeSearchWidget().dom
+          this.makeSearchWidget("Edit", (id: number) =>
+            this.makeTiledEditWindow(id)
+          ).dom
         ),
         bb => [
           bb("Create", "secondary", () => this.makeTiledCreateWindow(), true),

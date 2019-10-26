@@ -1,4 +1,10 @@
-import { container, Widget, DomWidget, ObservableState } from "../core/shared"
+import {
+  container,
+  Widget,
+  DomWidget,
+  ObservableState,
+  getResourceByName
+} from "../core/shared"
 import { AskStatus } from "../core/server"
 
 /*
@@ -145,8 +151,15 @@ export function showModal(
       typeof content === "string" ? container("<p></p>")(content) : content
     )
 
-  // https://stackoverflow.com/questions/10466129/how-to-hide-bootstrap-modal-with-javascript
-  const closeModal = () => dom.modal("hide")
+  const closeModal = () => {
+    dom.modal("hide")
+    dom.modal("dispose")
+    dom.remove()
+    // https://stackoverflow.com/questions/28077066/bootstrap-modal-issue-scrolling-gets-disabled
+    if ($(".modal.show").length > 0) {
+      $("body").addClass("modal-open")
+    }
+  }
 
   const buildButtonsParameterFunction = (
     text: string,
@@ -176,7 +189,14 @@ export function showModal(
   }
   dom.modal(settings)
   const modifiedPromise: any = new Promise<void>(res => {
-    dom.on("hidden.bs.modal", () => res())
+    dom.on("hidden.bs.modal", () => {
+      dom.modal("dispose")
+      dom.remove()
+      if ($(".modal.show").length > 0) {
+        $("body").addClass("modal-open")
+      }
+      res()
+    })
   })
   modifiedPromise.closeModal = closeModal
   return modifiedPromise
@@ -281,15 +301,39 @@ export function FormNumberInputWidget(type: string): FormValueWidget<number> {
 }
 
 export function FormIdInputWidget(
-  resource: string,
+  resource: string | undefined,
   isOptional: boolean
 ): FormValueWidget<number> {
   const input = $(`<input class="form-control" type="number">`)
   const dom = container("<div>")(
     input,
-    ButtonWidget("Change", () => {
-      showModal("Edit ID", String(resource), bb => [bb("Close", "primary")])
-    }).dom
+    resource === undefined
+      ? undefined
+      : ButtonWidget("Change", () => {
+          const { closeModal } = showModal(
+            "Edit ID",
+            getResourceByName(resource).makeSearchWidget("Pick", id => {
+              input.val(id)
+              closeModal()
+            }).dom,
+            bb =>
+              isOptional
+                ? [
+                    bb("Set to blank ID (-1)", "secondary", () =>
+                      input.val(-1)
+                    ),
+                    bb("Close", "primary")
+                  ]
+                : [bb("Close", "primary")]
+          )
+        }).dom,
+    resource === undefined
+      ? undefined
+      : ButtonWidget("View", () => {
+          if (getVal() !== -1) {
+            getResourceByName(resource).makeTiledEditWindow(getVal())
+          }
+        }).dom
   )
   function getVal(): number {
     return Number(input.val())
