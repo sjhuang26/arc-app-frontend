@@ -14,7 +14,8 @@ import {
   showModal,
   IdField,
   FormStringInputWidget,
-  FormSelectWidget
+  FormSelectWidget,
+  BooleanField
 } from "../widgets/ui"
 import { TableWidget } from "../widgets/Table"
 
@@ -739,13 +740,15 @@ const fieldNameMap: FieldNameMap = {
   homeroom: "Homeroom",
   homeroomTeacher: "Homeroom teacher",
   step: ["Step", "A number 1-4."],
-  chosenBooking: "Chosen booking",
   afterSchoolAvailability: "After-school availability",
   attendanceAnnotation: "Attendance annotation",
   additionalHours: [
     "Additional hours",
     "Additional time added to the hours count"
-  ]
+  ],
+  isSpecial: "Is special request?",
+  annotation: "Annotation",
+  chosenBookings: "Chosen bookings"
 }
 
 /*
@@ -804,9 +807,10 @@ const requestsInfo: UnprocessedResourceInfo = {
     ["learner", IdField("learners")],
     ["mods", NumberArrayField("number")],
     ["subject", StringField("text")],
-    ["specialRoom", StringField("text", "optional")],
+    ["isSpecial", BooleanField()],
+    ["annotation", StringField("text", "optional")],
     ["step", NumberField("number")],
-    ["chosenBooking", IdField("bookings", "optional")]
+    ["chosenBookings", NumberArrayField("number")] // TODO: this is a reference to an array of IDs
   ],
   fieldNameMap,
   tableFieldTitles: ["Learner", "Subject", "Mods"],
@@ -834,8 +838,8 @@ const bookingsInfo: UnprocessedResourceInfo = {
     [
       "status",
       SelectField(
-        ["ignore", "unsent", "waitingForTutor", "rejected"],
-        ["Ignore", "Unsent", "Waiting", "Rejected"]
+        ["ignore", "unsent", "waitingForTutor", "selected", "rejected"],
+        ["Ignore", "Unsent", "Waiting", "Selected", "Rejected"]
       )
     ]
   ],
@@ -875,7 +879,7 @@ const matchingsInfo: UnprocessedResourceInfo = {
     ["tutor", IdField("tutors")],
     ["subject", StringField("text")],
     ["mod", NumberField("number")],
-    ["specialRoom", StringField("text", "optional")]
+    ["annotation", StringField("text", "optional")]
   ],
   fieldNameMap,
   tableFieldTitles: ["Learner", "Tutor", "Mod", "Subject", "Status"],
@@ -883,15 +887,13 @@ const matchingsInfo: UnprocessedResourceInfo = {
     learners.createDataEditorMarker(record.learner, x => x.friendlyFullName),
     tutors.createDataEditorMarker(record.tutor, x => x.friendlyFullName),
     record.mod,
-    record.subject,
-    record.status
+    record.subject
   ],
   makeSearchableContent: record => [
     learners.createLabel(record.learner, x => x.friendlyFullName),
     tutors.createLabel(record.tutor, x => x.friendlyFullName),
     record.mod,
-    record.subject,
-    record.status
+    record.subject
   ],
   title: "matching",
   pluralTitle: "matchings",
@@ -906,8 +908,8 @@ const requestSubmissionsInfo: UnprocessedResourceInfo = {
     ...makeBasicStudentConfig(),
     ["mods", NumberArrayField("number")],
     ["subject", StringField("text")],
-    ["specialRoom", StringField("text", "optional")],
-    ["status", SelectField(["unchecked", "checked"], ["Unchecked", "Checked"])]
+    ["isSpecial", BooleanField()],
+    ["annotation", StringField("text", "optional")]
   ],
   fieldNameMap,
   tableFieldTitles: ["Name", "Mods", "Subject"],

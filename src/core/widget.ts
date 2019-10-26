@@ -120,6 +120,14 @@ function showStep3Messager(bookingId: number) {
 
   const dom = $("<div></div>")
 
+  if (r.isSpecial === true) {
+    dom.append(
+      $(
+        '<strong><p class="lead">This is a special request. Consider the following information when writing your message.</p></strong>'
+      )
+    )
+    dom.append(container("<p>")(r.annotation))
+  }
   dom.append($("<p>Contact the tutor:</p>"))
   dom.append(
     MessageTemplateWidget(
@@ -216,17 +224,20 @@ async function requestChangeToStep4(requestId: number, onFinish: () => void) {
   const { closeModal } = showModal("Saving...", "", bb => [], true)
   try {
     const r = requests.state.getRecordOrFail(requestId)
-    const b = bookings.state.getRecordOrFail(r.chosenBooking)
-    // ADD MATCHING
-    await matchings.state.createRecord({
-      learner: r.learner,
-      tutor: b.tutor,
-      subject: r.subject,
-      mod: b.mod,
-      specialRoom: r.specialRoom,
-      id: -1,
-      date: -1
-    })
+    for (const bookingId of r.chosenBookings) {
+      const b = bookings.state.getRecordOrFail(bookingId)
+      // ADD MATCHING
+      await matchings.state.createRecord({
+        learner: r.learner,
+        tutor: b.tutor,
+        subject: r.subject,
+        mod: b.mod,
+        specialRoom: r.specialRoom,
+        id: -1,
+        date: -1
+      })
+    }
+
     // DELETE ALL BOOKINGS ASSOCIATED WITH REQUEST
     for (const booking of Object.values(
       bookings.state.getRecordCollectionOrFail()
@@ -237,7 +248,7 @@ async function requestChangeToStep4(requestId: number, onFinish: () => void) {
     }
     // DELETE THE REFERENCE TO THE BOOKING & ADVANCE THE STEP
     r.step = 4
-    r.chosenBooking = -1
+    r.chosenBookings = []
     // NOTE: a matching is designed in the system to automatically take precedence over any of the drop-ins.
     // The drop-in array for the tutor will still include the mod.
     await requests.state.updateRecord(r)
@@ -250,7 +261,7 @@ async function requestChangeToStep4(requestId: number, onFinish: () => void) {
 }
 
 async function requestChangeToStep3(requestId: number, onFinish: () => void) {
-  const { closeModal } = showModal("Saving...", "", bb => [], true)
+  const { closeModal } = showModal("Saving...", "", () => [], true)
   try {
     const r = requests.state.getRecordOrFail(requestId)
     r.step = 3
@@ -265,20 +276,20 @@ async function requestChangeToStep3(requestId: number, onFinish: () => void) {
 
 async function requestChangeToStep2(
   requestId: number,
-  bookingId: number,
+  chosenBookings: number[],
   onFinish: () => void
 ): Promise<boolean> {
-  if (
-    await isOperationConfirmedByUser(
-      "Are you sure you want to match these students?"
-    )
-  ) {
+  if (await isOperationConfirmedByUser("Are you sure?")) {
+    if (chosenBookings.length === 0) {
+      showModal("You haven't marked any bookings as selected.", "", bb => [
+        bb("OK", "primary")
+      ])
+      return false
+    }
     const { closeModal } = showModal("Saving...", "", bb => [], true)
     try {
       const r = requests.state.getRecordOrFail(requestId)
-      // "choose" the booking
-      r.chosenBooking = bookingId
-      // go to step 2
+      r.chosenBookings = chosenBookings
       r.step = 2
       // update record
       requests.state.updateRecord(r)
@@ -486,54 +497,61 @@ function requestsNavigationScope(
   async function attemptRequestSubmissionConversion(
     record: Record
   ): Promise<void> {
-    // CREATE LEARNER
-    // try to dig up a learner with matching student ID, which would mean
-    // that the learner already exists in the database
-    const matches: Record[] = Object.values(learnerRecords).filter(
-      x => x.studentId === record.studentId
-    )
-    let learnerRecord: Record
-    if (matches.length > 1) {
-      // duplicate learner student IDs??
-      // this should be validated in the database
-      throw new Error(`duplicate student id: "${record.studentId}"`)
-    } else if (matches.length == 0) {
-      // create new learner
-      learnerRecord = getResultOrFail(
-        await learners.state.createRecord({
-          firstName: record.firstName,
-          lastName: record.lastName,
-          friendlyName: record.friendlyName,
-          friendlyFullName: record.friendlyFullName,
-          grade: record.grade,
-          id: -1,
-          date: -1,
-          studentId: record.studentId,
-          email: record.email,
-          phone: record.phone,
-          contactPref: record.contactPref,
-          homeroom: record.homeroom,
-          homeroomTeacher: record.homeroomTeacher,
-          attendanceAnnotation: "",
-          attendance: {}
-        })
-      )
+    let learnerId = -1
+    if (record.isSpecial) {
+      // special request; do nothing
     } else {
-      // learner already exists
-      learnerRecord = matches[0]
+      // CREATE LEARNER
+      // try to dig up a learner with matching student ID, which would mean
+      // that the learner already exists in the database
+
+      const matches: Record[] = Object.values(learnerRecords).filter(
+        x => x.studentId === record.studentId
+      )
+      if (matches.length > 1) {
+        // duplicate learner student IDs??
+        // this should be validated in the database
+        throw new Error(`duplicate student id: "${record.studentId}"`)
+      } else if (matches.length == 0) {
+        // create new learner
+        const learnerRecord = getResultOrFail(
+          await learners.state.createRecord({
+            firstName: record.firstName,
+            lastName: record.lastName,
+            friendlyName: record.friendlyName,
+            friendlyFullName: record.friendlyFullName,
+            grade: record.grade,
+            id: -1,
+            date: -1,
+            studentId: record.studentId,
+            email: record.email,
+            phone: record.phone,
+            contactPref: record.contactPref,
+            homeroom: record.homeroom,
+            homeroomTeacher: record.homeroomTeacher,
+            attendanceAnnotation: "",
+            attendance: {}
+          })
+        )
+        learnerId = learnerRecord.id
+      } else {
+        // learner already exists
+        learnerId = matches[0].id
+      }
     }
 
     // CREATE REQUEST
     getResultOrFail(
       await requests.state.createRecord({
-        learner: learnerRecord.id,
         id: -1,
         date: -1,
+        learner: learnerId,
         mods: record.mods,
         subject: record.subject,
-        specialRoom: record.specialRoom,
+        isSpecial: record.isSpecial,
+        annotation: record.annotation,
         step: 1,
-        chosenBooking: -1
+        chosenBookings: []
       })
     )
 
@@ -558,7 +576,9 @@ function requestsNavigationScope(
         ]
       }
     )
-    requestsTable.setAllValues(Object.values(requestRecords))
+    requestsTable.setAllValues(
+      Object.values(requestRecords).sort((a, b) => (a.step < b.step ? 1 : -1))
+    )
     return requestsTable.dom
   }
   function buildRequestIndex(): RequestIndex {
@@ -601,27 +621,27 @@ function requestsNavigationScope(
   function buildTutorIndex(): TutorIndex {
     const index: TutorIndex = {}
     for (const x of Object.values(tutorRecords)) {
-      index[String(x.id)] = {
+      index[x.id] = {
         id: x.id,
         matchedMods: [],
         bookedMods: []
       }
     }
     for (const x of Object.values(matchingRecords)) {
-      index[String(x.tutor)].matchedMods.push(x.mod)
+      index[x.tutor].matchedMods.push(x.mod)
     }
     for (const x of Object.values(bookingRecords)) {
-      index[String(x.tutor)].bookedMods.push(x.mod)
+      index[x.tutor].bookedMods.push(x.mod)
     }
     return index
   }
-  function generateBookerTable(requestId: number): JQuery {
+  function generateBookerTable(bookerTableValues: Record[]): JQuery {
     const bookerTable = TableWidget(
-      ["Booking", "Status", "Todo", "Match"],
+      ["Booking", "Status", "Todo"],
       (booking: Record) => {
         const formSelectWidget = FormSelectWidget(
-          ["ignore", "unsent", "waitingForTutor", "rejected"],
-          ["Ignore", "Unsent", "Waiting", "Rejected"]
+          ["ignore", "unsent", "waitingForTutor", "selected", "rejected"],
+          ["Ignore", "Unsent", "Waiting", "Selected", "Rejected"]
         )
         formSelectWidget.setValue(booking.status)
         formSelectWidget.onChange(async newVal => {
@@ -643,20 +663,11 @@ function requestsNavigationScope(
               )
           ),
           formSelectWidget.dom,
-          ButtonWidget("Todo", () => showStep1Messager(booking.id)).dom,
-          ButtonWidget("Match", () => {
-            requestChangeToStep2(requestId, booking.id, () =>
-              renavigate(["requests"], false)
-            )
-          }).dom
+          ButtonWidget("Todo", () => showStep1Messager(booking.id)).dom
         ]
       }
     )
-    bookerTable.setAllValues(
-      Object.values(bookings.state.getRecordCollectionOrFail())
-        .filter(x => x.request === requestId)
-        .map(x => bookings.state.getRecordOrFail(x.id))
-    )
+    bookerTable.setAllValues(bookerTableValues)
     return bookerTable.dom
   }
   function generateEditBookingsButton({
@@ -727,18 +738,40 @@ function requestsNavigationScope(
       }
       const request = requests.state.getRecordOrFail(requestId)
 
-      const header = container("<h1>")(
-        requests.createFriendlyMarker(requestId, () => "Request"),
-        ": ",
-        learners.createFriendlyMarker(
-          requests.state.getRecordOrFail(requestId).learner,
-          x => x.friendlyFullName
-        ),
+      const header = container("<div>")(
         container('<span class="badge badge-secondary">')(
           `Step ${requestIndex[requestId].uiStep} (${stepToName(
             requestIndex[requestId].uiStep
           )})`
-        )
+        ),
+        container("<p>")(
+          requests.createFriendlyMarker(requestId, x => "Link to request")
+        ),
+        container("<p>")(
+          "Learner: ",
+          request.isSpecial
+            ? "SPECIAL REQUEST"
+            : learners.createFriendlyMarker(
+                request.learner,
+                x =>
+                  `${x.friendlyFullName} (grade = ${x.grade}) (homeroom = ${x.homeroom} ${x.homeroomTeacher})`
+              )
+        ),
+        request.step === 3 || request.step === 2
+          ? ButtonWidget("go back a step", () => {
+              if (request.step === 2) {
+                request.chosenBookings = []
+              }
+              request.step--
+              requests.state.updateRecord(request)
+              renavigate(["requests", requestId], false)
+            }).dom
+          : undefined,
+        request.step === 3 || request.step === 2
+          ? container("<p>")(
+              `${request.chosenBookings.length} booking(s) chosen`
+            )
+          : undefined
       )
 
       // LOGIC: We use a toggle structure where:
@@ -755,9 +788,24 @@ function requestsNavigationScope(
       const tutorIndex: TutorIndex = buildTutorIndex()
 
       if (requestIndex[requestId].uiStep < 2) {
+        const bookerTableValues = Object.values(
+          bookings.state.getRecordCollectionOrFail()
+        )
+          .filter(x => x.request === requestId)
+          .map(x => bookings.state.getRecordOrFail(x.id))
+
         const uiStep01 = container("<div></div>")(
           header,
-          generateBookerTable(requestId),
+          generateBookerTable(bookerTableValues),
+          ButtonWidget("Move to step 2", () => {
+            requestChangeToStep2(
+              requestId,
+              bookerTableValues
+                .filter(booking => booking.status === "selected")
+                .map(booking => booking.id),
+              () => renavigate(["requests", requestId], false)
+            )
+          }).dom,
           generateEditBookingsButton({
             bookingsInfo,
             tutorIndex,
@@ -768,23 +816,11 @@ function requestsNavigationScope(
       }
       if (requestIndex[requestId].uiStep === 2) {
         const uiStep2 = container('<div class="jumbotron">')(
-          container("<h1>")("Write a pass for the learner"),
-          container('<p class="lead">')("Here is the information:"),
-          container("<p>")(
-            "Homeroom = " +
-              learners.createLabel(
-                requestRecords[requestId].learner,
-                x => x.homeroom
-              )
+          header,
+          container("<h1>")(
+            "Write a pass for the learner ONLY IF they are in 10th grade"
           ),
-          container("<p>")(
-            "Homeroom teacher = " +
-              learners.createLabel(
-                requestRecords[requestId].learner,
-                x => x.homeroomTeacher
-              )
-          ),
-          ButtonWidget("OK, I've written the pass", () =>
+          ButtonWidget("Move to step 3", () =>
             requestChangeToStep3(requestId, () =>
               renavigate(["requests", requestId], false)
             )
@@ -794,14 +830,15 @@ function requestsNavigationScope(
       }
       if (requestIndex[requestId].uiStep === 3) {
         const uiStep3 = container('<div class="jumbotron">')(
+          header,
           container("<h1>")("Send a confirmation to the learner"),
-          ButtonWidget("Send confirmation", () =>
-            showStep3Messager(request.chosenBooking)
-          ).dom,
-          container('<p class="lead">')(
-            "After that, click the button below, and the tutor will be assigned for real."
+          ...request.chosenBookings.map(
+            (bookingId: number) =>
+              ButtonWidget("Send confirmation", () =>
+                showStep3Messager(bookingId)
+              ).dom
           ),
-          ButtonWidget("OK, let's assign the tutor for real", () =>
+          ButtonWidget("Move to step 4", () =>
             requestChangeToStep4(requestId, () =>
               renavigate(["requests", requestId], false)
             )
@@ -1633,10 +1670,9 @@ export function rootWidget(): Widget {
   const sidebarDom = container("<div></div>")()
   const mainContentPanelDom = container("<div></div>")()
   const dom = container('<div id="app" class="layout-v"></div>')(
-    container('<nav class="navbar layout-item-fit">')(
-      $('<strong class="mr-4">ARC</strong>'),
-      generateNavigationBar()
-    ),
+    container(
+      '<nav class="navbar layout-item-fit top-ui-card" style="margin: 1rem;">'
+    )($('<strong class="mr-4">ARC App</strong>'), generateNavigationBar()),
     container('<div class="row m-4 layout-h">')(sidebarDom, mainContentPanelDom)
   )
   if (window["APP_DEBUG_MOCK"] === 1) showTestingModeWarning()

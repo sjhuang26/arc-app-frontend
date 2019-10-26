@@ -14,6 +14,11 @@ body {
   flex: 1;
   min-height: 0;
 }
+.top-ui-card {
+  border: 3px solid #ddd;
+  border-radius: 1rem;
+  background: #fafafa;
+}
 
 .app-sidebar {
   border-right: 5px solid #ddd;

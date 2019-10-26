@@ -300,6 +300,23 @@ export function FormNumberInputWidget(type: string): FormValueWidget<number> {
   }
 }
 
+export function FormBooleanInputWidget(): FormValueWidget<boolean> {
+  const input = $(`<input type="checkbox">`)
+  const dom = container('<div class="form-check">')(input)
+  return {
+    dom,
+    getValue(): boolean {
+      return input.prop("checked")
+    },
+    setValue(val: boolean): JQuery {
+      input.prop("checked", Boolean(val))
+      return dom
+    },
+    onChange(doThis) {
+      dom.change(doThis.call(null, input.prop("checked")))
+    }
+  }
+}
 export function FormIdInputWidget(
   resource: string | undefined,
   isOptional: boolean
@@ -414,6 +431,15 @@ export function NumberField(type: string, optional?: string): FormFieldType {
         // TODO support optionals, which will require null support for numbers
         return true
       }
+      return true
+    }
+  }
+}
+export function BooleanField(): FormFieldType {
+  return {
+    makeWidget: () => FormBooleanInputWidget(),
+    validator(val: any) {
+      if (typeof val !== "boolean") return "not a true/false value"
       return true
     }
   }

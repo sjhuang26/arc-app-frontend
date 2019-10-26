@@ -18,6 +18,7 @@ yarn run parcel-build-nomap || exit 1
 # copy files from ./dist to ./arc-app-frontend-server/dist (which is a nested git repository)
 cp ./dist/src.*.js ./arc-app-frontend-server/dist/index.js || exit 1
 cp ./dist/src.*.css ./arc-app-frontend-server/dist/index.css || exit 1
+cp ./dist/favicon.*.ico ./arc-app-frontend-server/dist/favicon.ico || exit 1
 
 # now we are in the subdirectory!
 cd arc-app-frontend-server || exit 1
