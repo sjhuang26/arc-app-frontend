@@ -1348,7 +1348,10 @@ function attendanceNavigationScope(
         totalMinutes += student.additionalHours
       }
       for (const x of Object.values<any>(student.attendance)) {
-        for (const { minutes } of x) {
+        for (const attendanceModDataString of x) {
+          const tokens = attendanceModDataString.split(" ")
+
+          const minutes = Number(tokens[1])
           if (minutes === 1) {
             ++numExcused
           } else if (minutes <= 0) {
@@ -1408,29 +1411,50 @@ function attendanceNavigationScope(
           alertError(e)
         }
       })
+      type AttendanceModData = {
+        date: number
+        mod: number
+        minutes: number
+      }
       const table = TableWidget(
         // Both learners and tutors are students.
         ["Date", "Mod", "Present?"],
-        (attendanceEntry: { date: number; mod: number; minutes: number }) => {
+        (x: AttendanceModData) => {
           return [
-            new Date(attendanceEntry.date).toISOString().substring(0, 10),
-            String(attendanceEntry.mod),
-            attendanceEntry.minutes > 0
-              ? attendanceEntry.minutes === 1
+            new Date(x.date).toISOString().substring(0, 10),
+            String(x.mod),
+            x.minutes > 0
+              ? x.minutes === 1
                 ? "EXCUSED"
-                : `P (${attendanceEntry.minutes} minutes)`
+                : `P (${x.minutes} minutes)`
               : $('<span style="color:red">ABSENT</span>')
           ]
         }
       )
-      const attendanceData = []
-      for (const x of Object.values<any>(student.attendance)) {
-        for (const y of x) {
-          attendanceData.push(y)
+      const attendanceData: AttendanceModData[] = []
+      for (const [dateKey, dateData] of Object.entries<string[]>(
+        student.attendance
+      )) {
+        for (const attendanceModDataString of dateData) {
+          const x = attendanceModDataString.split(" ")
+          attendanceData.push({
+            date: Number(dateKey),
+            mod: Number(x[0]),
+            minutes: Number(x[1])
+          })
         }
       }
+      attendanceData.sort((a, b) => {
+        // descending by date
+        if (a.date < b.date) return 1
+        if (a.date > b.date) return -1
+        // ascending by mod
+        if (a.mod < b.mod) return -1
+        if (a.mod > b.mod) return 1
+        return 0
+      })
       table.setAllValues(attendanceData)
-      return container("<div>")(
+      return container('<div class="overflow-auto">')(
         header,
         $('<p class="lead">Attendance annotation:</p>'),
         attendanceAnnotation.dom,
