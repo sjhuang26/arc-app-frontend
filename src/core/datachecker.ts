@@ -93,8 +93,6 @@ function runDataCheckerSpecialCheck(
             type: typeof modsPref
           },
           {
-            resource: "tutors",
-            id: tutor.id,
             field: "mods",
             value: String(mods),
             type: typeof mods
@@ -112,16 +110,14 @@ function runDataCheckerSpecialCheck(
           {
             resource: "tutors",
             id: tutor.id,
-            text: "list of mods tutor has been matched to",
-            value: String(matchedMods),
-            type: typeof matchedMods
-          },
-          {
-            resource: "tutors",
-            id: tutor.id,
             field: "mods",
             value: String(mods),
             type: typeof mods
+          },
+          {
+            text: "list of mods tutor has been matched to",
+            value: String(matchedMods),
+            type: typeof matchedMods
           },
           ...ind[tutor.id].map(matching => ({
             resource: "matchings",

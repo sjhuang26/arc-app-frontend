@@ -311,37 +311,39 @@ function runDatacheckerNavigationScope(
     const subtags: JQuery[] = []
 
     if (tag.resource !== undefined) {
-      subtags.push(container("<span>")("Resource: ", tag.resource))
+      subtags.push(
+        container("<span>")(
+          container("<strong>")(`Relevant item (${tag.resource})`)
+        )
+      )
     }
     if (tag.id !== undefined) {
       subtags.push(
         container("<span>")(
-          "ID of item: ",
+          `ID#${tag.id} `,
           getResourceByName(tag.resource).createDataEditorMarker(
             tag.id,
-            () => `Open (${tag.id})`
+            () => "(OPEN)"
           )
         )
       )
     }
     if (tag.idResource !== undefined) {
-      subtags.push(
-        container("<span>")("Resource that ID refers to: ", tag.idResource)
-      )
+      subtags.push(container("<span>")(`[ID refers to ${tag.idResource}]`))
     }
     if (tag.text !== undefined) {
-      subtags.push(container("<span>")("Item: ", tag.text))
+      subtags.push(container("<span>")(tag.text))
     }
     if (tag.field !== undefined) {
-      subtags.push(container("<span>")("Field: ", tag.field))
+      subtags.push(container("<span>")(tag.field))
     }
     if (tag.value !== undefined) {
-      subtags.push(container("<span>")("Value: ", tag.value))
+      subtags.push(container("<span>")(tag.value))
     }
     if (tag.type !== undefined) {
-      subtags.push(container("<span>")("Format of value: ", tag.type))
+      subtags.push(container("<span>")(`[format=${tag.type}]`))
     }
-    return container('<ul class="list-group">')(
+    return container('<ul class="list-group my-4">')(
       subtags.map(subtag => container('<li class="list-group-item">')(subtag))
     )
   }
