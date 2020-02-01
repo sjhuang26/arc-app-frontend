@@ -1339,7 +1339,7 @@ function attendanceNavigationScope(
   const l = Object.values(learners.state.getRecordCollectionOrFail())
   const sidebarTable = TableWidget(
     // Both learners and tutors are students.
-    ["Student", "Total minutes", "Attendance level", "Details"],
+    ["Student", "Total hours", "Attendance level", "Details"],
     ({ isLearner, student }: { isLearner: boolean; student: Record }) => {
       // calculate the attendance level & totals
       let numPresent = 0
@@ -1369,7 +1369,7 @@ function attendanceNavigationScope(
           student.id,
           x => x.friendlyFullName
         ),
-        String(totalMinutes),
+        String((totalMinutes / 60).toFixed(1)),
         `${numPresent}P / ${numExcused}EX / ${numAbsent}A`,
         ButtonWidget("Details", () => {
           renavigate(["attendance", student.id], true)
