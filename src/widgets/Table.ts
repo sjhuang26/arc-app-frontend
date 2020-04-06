@@ -1,4 +1,4 @@
-import { RecordCollection, Record, container } from "../core/shared"
+import { RecCollection, Rec, container } from "../core/shared"
 
 export function TableWidget<T>(
   headerTitles: string[],

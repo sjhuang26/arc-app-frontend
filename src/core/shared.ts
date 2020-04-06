@@ -45,9 +45,9 @@ export enum SchedulingReference {
 }
 
 export function schedulingTutorIndex(
-  tutorRecords: RecordCollection,
-  bookingRecords: RecordCollection,
-  matchingRecords: RecordCollection
+  tutorRecords: RecCollection,
+  bookingRecords: RecCollection,
+  matchingRecords: RecCollection
 ) {
   const tutorIndex: {
     [id: number]: {
@@ -221,13 +221,13 @@ export function generateStringOfMods(
 RECORDS
 
 */
-export type Record = {
+export type Rec = {
   id: number
   date: number
   [others: string]: any
 }
-export type RecordCollection = {
-  [id: string]: Record
+export type RecCollection = {
+  [id: string]: Rec
 }
 
 /*
@@ -247,10 +247,10 @@ export class ResourceEndpoint {
 
   // NOTE: ALL THESE RETURN PROMISES
 
-  retrieveAll(): Promise<AskFinished<RecordCollection>> {
+  retrieveAll(): Promise<AskFinished<RecCollection>> {
     return this.askEndpoint("retrieveAll")
   }
-  create(record: Record): Promise<AskFinished<Record>> {
+  create(record: Rec): Promise<AskFinished<Rec>> {
     return this.askEndpoint("create", record)
   }
   delete(id: number): Promise<AskFinished<void>> {
@@ -259,12 +259,12 @@ export class ResourceEndpoint {
   debug(): Promise<AskFinished<any>> {
     return this.askEndpoint("debug")
   }
-  update(record: Record): Promise<AskFinished<void>> {
+  update(record: Rec): Promise<AskFinished<void>> {
     return this.askEndpoint("update", record)
   }
 }
 export class ResourceObservable extends ObservableState<
-  AskFinished<RecordCollection>
+  AskFinished<RecCollection>
 > {
   endpoint: ResourceEndpoint
 
@@ -292,33 +292,33 @@ export class ResourceObservable extends ObservableState<
     return val[String(id)]
   }
 
-  getLoadedOrFail(): RecordCollection {
+  getLoadedOrFail(): RecCollection {
     if (this.val.status != AskStatus.LOADED) {
       throw new Error("resource is not loaded: " + this.endpoint.name)
     }
     return this.val.val
   }
 
-  getRecordCollectionOrFail(): RecordCollection {
+  getRecordCollectionOrFail(): RecCollection {
     if (this.val.status == AskStatus.ERROR) {
       throw this.val.message
     } else {
       return this.val.val
     }
   }
-  async dependOnRecordOrFail(id: number): Promise<Record> {
+  async dependOnRecordOrFail(id: number): Promise<Rec> {
     await this.getRecordCollectionOrFail()
     return this.getRecordOrFail(id)
   }
 
-  async updateRecord(record: Record): Promise<AskFinished<void>> {
+  async updateRecord(record: Rec): Promise<AskFinished<void>> {
     if (this.val.status === AskStatus.ERROR) return this.val
     this.val.val[String(record.id)] = record
     this.change.trigger()
     return await this.endpoint.update(record)
   }
 
-  async createRecord(record: Record): Promise<AskFinished<Record>> {
+  async createRecord(record: Rec): Promise<AskFinished<Rec>> {
     if (this.val.status === AskStatus.ERROR) return this.val
     const ask = await this.endpoint.create(record)
     if (ask.status !== AskStatus.ERROR) {
@@ -335,14 +335,14 @@ export class ResourceObservable extends ObservableState<
     return await this.endpoint.delete(id)
   }
 
-  onServerNotificationUpdate(record: Record) {
+  onServerNotificationUpdate(record: Rec) {
     if (this.val.status === AskStatus.LOADED) {
       this.val.val[String(record.id)] = record
       this.change.trigger()
     }
   }
 
-  onServerNotificationCreate(record: Record) {
+  onServerNotificationCreate(record: Rec) {
     if (this.val.status === AskStatus.LOADED) {
       this.val.val[String(record.id)] = record
       this.change.trigger()
@@ -376,7 +376,7 @@ export class Resource {
 
   createFriendlyMarker(
     id: number,
-    builder: (record: Record) => string,
+    builder: (record: Rec) => string,
     onClick?: () => void
   ): JQuery {
     // TODO
@@ -385,13 +385,13 @@ export class Resource {
 
   createDataEditorMarker(
     id: number,
-    builder: (record: Record) => string,
+    builder: (record: Rec) => string,
     onClick: () => void = () => this.makeTiledEditWindow(id)
   ): JQuery {
     return createMarkerLink(this.createLabel(id, builder), onClick)
   }
 
-  createLabel(id: number, builder: (record: Record) => string): string {
+  createLabel(id: number, builder: (record: Rec) => string): string {
     try {
       if (id === -1) return "[NONE]"
       const record = this.state.getRecordOrFail(id)
@@ -402,7 +402,7 @@ export class Resource {
     }
   }
 
-  createDomLabel(id: number, builder: (record: Record) => JQuery): JQuery {
+  createDomLabel(id: number, builder: (record: Rec) => JQuery): JQuery {
     try {
       if (id === -1) return $("<span>[NONE]</span>")
       const record = this.state.getRecordOrFail(id)
@@ -415,7 +415,7 @@ export class Resource {
 
   // The edit window is kind of combined with the view window.
   makeTiledEditWindow(id: number): void {
-    let record: Record = null
+    let record: Rec = null
     let errorMessage: string = ""
     try {
       function capitalizeWord(w: string) {
@@ -711,21 +711,21 @@ export type ResourceFieldInfo = {
 export type ResourceInfo = {
   fields: ResourceFieldInfo[]
   tableFieldTitles: string[]
-  makeTableRowContent: (record: Record) => (JQuery | string)[]
-  makeSearchableContent: (record: Record) => string[]
+  makeTableRowContent: (record: Rec) => (JQuery | string)[]
+  makeSearchableContent: (record: Rec) => string[]
   title: string
   pluralTitle: string
-  makeLabel: (record: Record) => string
+  makeLabel: (record: Rec) => string
 }
 export type UnprocessedResourceInfo = {
   fields: [string, FormFieldType][] // name, string/number, type
   fieldNameMap: FieldNameMap // name | [name, info?]
   tableFieldTitles: string[]
-  makeTableRowContent: (record: Record) => (JQuery | string)[]
-  makeSearchableContent: (record: Record) => string[]
+  makeTableRowContent: (record: Rec) => (JQuery | string)[]
+  makeSearchableContent: (record: Rec) => string[]
   title: string
   pluralTitle: string
-  makeLabel: (record: Record) => string
+  makeLabel: (record: Rec) => string
 }
 
 export function processResourceInfo(

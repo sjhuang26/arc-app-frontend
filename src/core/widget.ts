@@ -9,7 +9,7 @@ import {
   matchings,
   bookings,
   stringifyError,
-  Record,
+  Rec,
   stringifyMod,
   alertError,
   arrayEqual,
@@ -421,7 +421,7 @@ function requestsNavigationScope(
   }: {
     bookingsInfo: BookingsInfo
     tutorIndex: TutorIndex
-    request: Record
+    request: Rec
   }): JQuery {
     type TableRow = {
       tutorId: number
@@ -496,7 +496,7 @@ function requestsNavigationScope(
     return table.dom
   }
   async function attemptRequestSubmissionConversion(
-    record: Record
+    record: Rec
   ): Promise<void> {
     let learnerId = -1
     if (record.isSpecial) {
@@ -506,7 +506,7 @@ function requestsNavigationScope(
       // try to dig up a learner with matching student ID, which would mean
       // that the learner already exists in the database
 
-      const matches: Record[] = Object.values(learnerRecords).filter(
+      const matches: Rec[] = Object.values(learnerRecords).filter(
         x => x.studentId === record.studentId
       )
       if (matches.length > 1) {
@@ -565,7 +565,7 @@ function requestsNavigationScope(
   function generateRequestsTable(): JQuery {
     const requestsTable = TableWidget(
       ["Request", "Step #", "Open"],
-      (i: Record) => {
+      (i: Rec) => {
         return [
           requests.createDataEditorMarker(i.id, x =>
             x.learner === -1
@@ -638,10 +638,10 @@ function requestsNavigationScope(
     }
     return index
   }
-  function generateBookerTable(bookerTableValues: Record[]): JQuery {
+  function generateBookerTable(bookerTableValues: Rec[]): JQuery {
     const bookerTable = TableWidget(
       ["Booked tutor", "Status", "Todo"],
-      (booking: Record) => {
+      (booking: Rec) => {
         const formSelectWidget = FormSelectWidget(
           ["ignore", "unsent", "waitingForTutor", "selected", "rejected"],
           ["Ignore", "Unsent", "Waiting", "Selected", "Rejected"]
@@ -675,7 +675,7 @@ function requestsNavigationScope(
   }: {
     bookingsInfo: BookingsInfo
     tutorIndex: TutorIndex
-    request: Record
+    request: Rec
   }): JQuery {
     return ButtonWidget("Edit bookings", () => {
       showModal(
@@ -1296,7 +1296,7 @@ function attendanceNavigationScope(
   const sidebarTable = TableWidget(
     // Both learners and tutors are students.
     ["Student", "Total hours", "Attendance level", "Details"],
-    ({ isLearner, student }: { isLearner: boolean; student: Record }) => {
+    ({ isLearner, student }: { isLearner: boolean; student: Rec }) => {
       // calculate the attendance level & totals
       let numPresent = 0
       let numExcused = 0

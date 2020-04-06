@@ -1,7 +1,7 @@
 import {
   MyTesting,
   Resource,
-  RecordCollection,
+  RecCollection,
   tutors,
   learners,
   bookings,
@@ -10,7 +10,7 @@ import {
   requestSubmissions,
   stringifyError,
   ResourceInfo,
-  Record
+  Rec
 } from "./shared"
 
 function failAfterFiveSeconds<T>(p: Promise<T>): Promise<T> {
@@ -121,13 +121,13 @@ export async function onClientNotification(args: any[]): Promise<void> {
     requestSubmissions: () => requestSubmissions
   }
   if (args[0] === "update") {
-    getResource[args[1]]().state.onServerNotificationUpdate(args[2] as Record)
+    getResource[args[1]]().state.onServerNotificationUpdate(args[2] as Rec)
   }
   if (args[0] === "delete") {
     getResource[args[1]]().state.onServerNotificationDelete(args[2] as number)
   }
   if (args[0] === "create") {
-    getResource[args[1]]().state.onServerNotificationCreate(args[2] as Record)
+    getResource[args[1]]().state.onServerNotificationCreate(args[2] as Rec)
   }
 }
 
@@ -266,10 +266,10 @@ function mockError(message: string): ServerResponse<any> {
 
 class MockResourceServerEndpoint {
   resource: () => Resource
-  public contents: RecordCollection
+  public contents: RecCollection
   nextKey: number = 1000 // default ID is an arbitrary high number for testing purposes
 
-  constructor(resource: () => Resource, contents: RecordCollection) {
+  constructor(resource: () => Resource, contents: RecCollection) {
     // IMPORTANT: the resource field is ":() => Resource" intentionally.
     // The general rule is that exported variables from another module
     // aren't available until runtime.

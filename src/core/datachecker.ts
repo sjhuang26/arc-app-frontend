@@ -5,8 +5,8 @@ import {
   requests,
   tutors,
   requestSubmissions,
-  Record,
-  RecordCollection,
+  Rec,
+  RecCollection,
   getResourceByName
 } from "./shared"
 
@@ -34,13 +34,13 @@ function dataCheckerUtilCheckSubset<T>(a: T[], b: T[]) {
   return true
 }
 function runDataCheckerSpecialCheck(
-  tutorRecords: RecordCollection,
-  matchingRecords: RecordCollection
+  tutorRecords: RecCollection,
+  matchingRecords: RecCollection
 ) {
   let numValidFields = 0
   const problems: DataCheckerProblem[] = []
   type Index = {
-    [tutorId: number]: Record[]
+    [tutorId: number]: Rec[]
   }
   const ind: Index = {}
   for (const tutor of Object.values(tutorRecords)) {

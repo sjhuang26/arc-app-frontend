@@ -1,9 +1,9 @@
-import { container, Widget, Record, ResourceFieldInfo } from "../core/shared"
+import { container, Widget, Rec, ResourceFieldInfo } from "../core/shared"
 import { FormValueWidget } from "./ui"
 
 export type FormWidget = Widget & {
-  getAllValues(): Record
-  setAllValues(record: Record): void
+  getAllValues(): Rec
+  setAllValues(record: Rec): void
 }
 export function FormWidget(fields: ResourceFieldInfo[]): FormWidget {
   const widgets: { [fieldName: string]: FormValueWidget<any> } = {}
@@ -22,14 +22,14 @@ export function FormWidget(fields: ResourceFieldInfo[]): FormWidget {
   )
   return {
     dom,
-    getAllValues(): Record {
+    getAllValues(): Rec {
       const result = {}
       for (const { name } of fields) {
         result[name] = widgets[name].getValue()
       }
-      return result as Record
+      return result as Rec
     },
-    setAllValues(values: Record) {
+    setAllValues(values: Rec) {
       for (const [name, value] of Object.entries(values)) {
         if (widgets[name] === undefined) {
           throw new Error("name " + String(name) + " does not exist in form")
