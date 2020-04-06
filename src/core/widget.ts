@@ -15,7 +15,10 @@ import {
   arrayEqual,
   resources,
   getResourceByName,
-  forceRefreshAllResources
+  forceRefreshAllResources,
+  ModStatus,
+  SchedulingReference,
+  schedulingTutorIndex
 } from "./shared"
 import {
   ButtonWidget,
@@ -962,53 +965,6 @@ function scheduleEditNavigationScope(
       )
     )
   }
-
-  // CREATE INDEX OF TUTORS --> [ STATUS, STATUS, STATUS ... ] for each mod
-  const tutorModStatusIndex: {
-    [id: number]: {
-      id: number
-      modStatus: (string | (string | number)[])[]
-    }
-  } = {}
-  for (const tutor of Object.values(tutorRecords)) {
-    tutorModStatusIndex[tutor.id] = {
-      id: tutor.id,
-      modStatus: []
-    }
-    for (let i = 0; i < 20; ++i) {
-      tutorModStatusIndex[tutor.id].modStatus.push("none")
-    }
-    // mod status: available
-    for (const mod of tutor.mods) {
-      tutorModStatusIndex[tutor.id].modStatus[mod - 1] = "available"
-    }
-    // mod status: drop-in
-    for (const mod of tutor.dropInMods) {
-      if (tutorModStatusIndex[tutor.id].modStatus[mod - 1] === "available") {
-        tutorModStatusIndex[tutor.id].modStatus[mod - 1] = "dropIn"
-      }
-    }
-    // mod status: preferred mods
-    for (const mod of tutor.modsPref) {
-      tutorModStatusIndex[tutor.id].modStatus[mod - 1] += "Pref"
-    }
-  }
-  for (const booking of Object.values(bookingRecords)) {
-    if (booking.status !== "ignore" && booking.status !== "rejected") {
-      // mod status: booked
-      tutorModStatusIndex[booking.tutor].modStatus[booking.mod - 1] = [
-        "booked",
-        booking.id
-      ]
-    }
-  }
-  for (const matching of Object.values(matchingRecords)) {
-    // mod status: matched
-    tutorModStatusIndex[matching.tutor].modStatus[matching.mod - 1] = [
-      "matched",
-      matching.id
-    ]
-  }
   function popupUtilPlaceElement(
     domA: JQuery,
     domB: JQuery,
@@ -1049,47 +1005,41 @@ function scheduleEditNavigationScope(
       popoverContentDom.append(popoverContent())
     })
   }
-  function popupUtilCountUnavailable(id: number) {
-    let x = 0
-    for (let i = 0; i < 20; ++i) {
-      const status = tutorModStatusIndex[id].modStatus[i]
-      if (
-        status !== "none" &&
-        status !== "available" &&
-        status !== "availablePref"
-      ) {
-        ++x
-      }
-    }
-    return x
-  }
+  const tutorIndex = schedulingTutorIndex(
+    tutorRecords,
+    bookingRecords,
+    matchingRecords
+  )
   function generatePopupAvailable(id: number, mod: number) {
-    const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1]
-    if (typeof initialStatus !== "string") {
-      throw new Error("typecheck failed in generatePopupSchedule")
-    }
+    const initialStatus = tutorIndex[id].modStatus[mod - 1]
     const element = container(
       '<li class="list-group-item list-group-item-action">'
     )(
       tutors.createLabel(id, x => x.friendlyFullName),
-      initialStatus.endsWith("Pref") ? "*" : ""
+      initialStatus === ModStatus.DROP_IN_PREF ||
+        initialStatus === ModStatus.FREE_PREF
+        ? "*"
+        : ""
     )
-    if (initialStatus.endsWith("Pref")) {
+    if (
+      initialStatus === ModStatus.DROP_IN_PREF ||
+      initialStatus === ModStatus.FREE_PREF
+    ) {
       element.addClass("text-primary")
     }
 
     function popoverContent() {
       const popoverContent = container('<div class="btn-group m-2">')()
       popoverContent.append(
-        ButtonWidget(`(${popupUtilCountUnavailable(id)}x)`, () => {}).dom
+        ButtonWidget(`(${tutorIndex[id].refs.length}x)`, () => {}).dom
       )
       for (let i = 0; i < 20; ++i) {
-        const status = tutorModStatusIndex[id].modStatus[i]
-        if (typeof status !== "string" || !status.startsWith("available"))
+        const status = tutorIndex[id].modStatus[i]
+        if (status !== ModStatus.FREE && status !== ModStatus.FREE_PREF)
           continue
         popoverContent.append(
           ButtonWidget(
-            String(i + 1) + (status === "availablePref" ? "*" : ""),
+            String(i + 1) + (status === ModStatus.FREE_PREF ? "*" : ""),
             () => {
               const arr = editedDropInModsIndex[id]
               // add the new mod
@@ -1097,10 +1047,10 @@ function scheduleEditNavigationScope(
               // sort
               arr.sort()
               // edit status index
-              tutorModStatusIndex[id].modStatus[i] =
-                tutorModStatusIndex[id].modStatus[i] === "availablePref"
-                  ? "dropInPref"
-                  : "dropIn"
+              tutorIndex[id].modStatus[i] =
+                status === ModStatus.FREE_PREF
+                  ? ModStatus.DROP_IN_PREF
+                  : ModStatus.DROP_IN
               // hide popover
               element.popover("hide")
               // rebind data handler
@@ -1118,7 +1068,7 @@ function scheduleEditNavigationScope(
     })
   }
   function generatePopupSchedule(id: number, mod: number) {
-    const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1]
+    const initialStatus = tutorIndex[id].modStatus[mod - 1]
     if (typeof initialStatus !== "string") {
       throw new Error("typecheck failed in generatePopupSchedule")
     }
@@ -1126,40 +1076,46 @@ function scheduleEditNavigationScope(
       '<li class="list-group-item list-group-item-action">'
     )(
       tutors.createLabel(id, x => x.friendlyFullName),
-      initialStatus.endsWith("Pref") ? "*" : ""
+      initialStatus === ModStatus.DROP_IN_PREF ||
+        initialStatus === ModStatus.FREE_PREF
+        ? "*"
+        : ""
     )
-    if (initialStatus.endsWith("Pref")) {
+    if (
+      initialStatus === ModStatus.DROP_IN_PREF ||
+      initialStatus === ModStatus.FREE_PREF
+    ) {
       element.addClass("text-primary")
     }
     function popoverContent() {
       const popoverContent = container('<div class="btn-group m-2">')()
       popoverContent.append(
-        ButtonWidget(`(${popupUtilCountUnavailable(id)}x)`, () => {}).dom
+        ButtonWidget(`(${tutorIndex[id].refs.length}x)`, () => {}).dom
       )
       for (let i = 0; i < 20; ++i) {
-        const status = tutorModStatusIndex[id].modStatus[i]
-        if (typeof status !== "string" || !status.startsWith("available"))
+        const status = tutorIndex[id].modStatus[i]
+        if (status !== ModStatus.FREE && status !== ModStatus.FREE_PREF)
           continue
         popoverContent.append(
           ButtonWidget(
-            String(i + 1) + (status === "availablePref" ? "*" : ""),
+            String(i + 1) + (status === ModStatus.FREE_PREF ? "*" : ""),
             () => {
-              // remove the mod
               const arr = editedDropInModsIndex[id]
+              // remove the mod
               arr.splice(arr.indexOf(mod), 1)
               // add the mod
               arr.push(i + 1)
               // sort
               arr.sort()
               // edit status index
-              tutorModStatusIndex[id].modStatus[mod - 1] =
-                tutorModStatusIndex[id].modStatus[mod - 1] === "dropInPref"
-                  ? "availablePref"
-                  : "available"
-              tutorModStatusIndex[id].modStatus[i] =
-                tutorModStatusIndex[id].modStatus[i] === "availablePref"
-                  ? "dropInPref"
-                  : "dropIn"
+              tutorIndex[id].modStatus[mod - 1] =
+                initialStatus === ModStatus.DROP_IN_PREF
+                  ? ModStatus.FREE_PREF
+                  : ModStatus.FREE
+              tutorIndex[id].modStatus[i] =
+                status === ModStatus.FREE_PREF
+                  ? ModStatus.DROP_IN_PREF
+                  : ModStatus.DROP_IN
               // dispose popover
               element.popover("dispose")
               // destroy element
@@ -1178,10 +1134,10 @@ function scheduleEditNavigationScope(
           // sort
           arr.sort()
           // edit status index
-          tutorModStatusIndex[id].modStatus[mod - 1] =
-            tutorModStatusIndex[id].modStatus[mod - 1] === "dropInPref"
-              ? "availablePref"
-              : "available"
+          tutorIndex[id].modStatus[mod - 1] =
+            initialStatus === ModStatus.DROP_IN_PREF
+              ? ModStatus.FREE_PREF
+              : ModStatus.FREE
           // detach element
           element.detach()
           // dispose popover
@@ -1198,7 +1154,7 @@ function scheduleEditNavigationScope(
     })
   }
   function generatePopupScheduleMatch(id: number, mod: number) {
-    const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1]
+    const initialStatus = tutorIndex[id].modStatus[mod - 1]
     if (!Array.isArray(initialStatus)) {
       throw new Error("typecheck failed in generatePopupScheduleMatch")
     }
@@ -1241,7 +1197,7 @@ function scheduleEditNavigationScope(
     mod: number,
     bookingId: number
   ) {
-    const initialStatus = tutorModStatusIndex[id].modStatus[mod - 1]
+    const initialStatus = tutorIndex[id].modStatus[mod - 1]
     if (!Array.isArray(initialStatus)) {
       throw new Error("typecheck failed in generatePopupScheduleBook")
     }
@@ -1271,7 +1227,7 @@ function scheduleEditNavigationScope(
     })
   }
 
-  for (const { id, modStatus } of Object.values(tutorModStatusIndex)) {
+  for (const { id, modStatus } of Object.values(tutorIndex)) {
     for (let i = 0; i < 20; ++i) {
       const status = modStatus[i]
       if (Array.isArray(status)) {
@@ -1283,11 +1239,11 @@ function scheduleEditNavigationScope(
         }
       }
       if (typeof status === "string") {
-        if (status.startsWith("dropIn")) {
+        if (status === ModStatus.DROP_IN || status === ModStatus.DROP_IN_PREF) {
           generatePopupAvailable(id, i + 1)
           generatePopupSchedule(id, i + 1)
         }
-        if (status.startsWith("available")) {
+        if (status === ModStatus.FREE || status === ModStatus.FREE_PREF) {
           generatePopupAvailable(id, i + 1)
         }
       }

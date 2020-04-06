@@ -29,6 +29,82 @@ ALL BASIC CLASSES AND BASIC UTILS
 
 */
 
+export enum ModStatus {
+  UNFREE,
+  FREE,
+  DROP_IN,
+  BOOKED,
+  MATCHED,
+  FREE_PREF,
+  DROP_IN_PREF
+}
+
+export enum SchedulingReference {
+  BOOKING,
+  MATCHING
+}
+
+export function schedulingTutorIndex(
+  tutorRecords: RecordCollection,
+  bookingRecords: RecordCollection,
+  matchingRecords: RecordCollection
+) {
+  const tutorIndex: {
+    [id: number]: {
+      id: number
+      modStatus: ModStatus[]
+      refs: [SchedulingReference, number][]
+    }
+  } = {}
+  for (const tutor of Object.values(tutorRecords)) {
+    tutorIndex[tutor.id] = {
+      id: tutor.id,
+      modStatus: Array(20).fill(ModStatus.UNFREE),
+      refs: []
+    }
+    const tms = tutorIndex[tutor.id].modStatus
+    for (const mod of tutor.mods) {
+      tms[mod - 1] = ModStatus.FREE
+    }
+    for (const mod of tutor.dropInMods) {
+      tms[mod - 1] = ModStatus.DROP_IN
+    }
+    for (const mod of tutor.modsPref) {
+      switch (tms[mod - 1]) {
+        case ModStatus.FREE:
+        case ModStatus.UNFREE:
+          tms[mod - 1] = ModStatus.FREE_PREF
+          break
+        case ModStatus.DROP_IN:
+          tms[mod - 1] = ModStatus.DROP_IN_PREF
+          break
+        default:
+          throw new Error()
+      }
+    }
+  }
+  for (const booking of Object.values(bookingRecords)) {
+    if (booking.status !== "ignore" && booking.status !== "rejected") {
+      if (booking.mod !== undefined)
+        tutorIndex[booking.tutor].modStatus[booking.mod - 1] = ModStatus.BOOKED
+      tutorIndex[booking.tutor].refs.push([
+        SchedulingReference.BOOKING,
+        booking.id
+      ])
+    }
+  }
+  for (const matching of Object.values(matchingRecords)) {
+    if (matching.mod !== undefined) {
+      tutorIndex[matching.tutor].modStatus[matching.mod - 1] = ModStatus.MATCHED
+      tutorIndex[matching.tutor].refs.push([
+        SchedulingReference.MATCHING,
+        matching.id
+      ])
+    }
+  }
+  return tutorIndex
+}
+
 export function arrayEqual<T>(a: T[], b: T[]): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; ++i) {
