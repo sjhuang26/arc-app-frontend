@@ -29,6 +29,21 @@ ALL BASIC CLASSES AND BASIC UTILS
 
 */
 
+/*
+
+Shared with the other file
+
+*/
+
+export type Rec = {
+  id: number
+  date: number
+  [others: string]: any
+}
+export type RecCollection = {
+  [id: string]: Rec
+}
+
 export enum ModStatus {
   UNFREE,
   FREE,
@@ -104,6 +119,12 @@ export function schedulingTutorIndex(
   }
   return tutorIndex
 }
+
+/*
+
+/END
+
+*/
 
 export function arrayEqual<T>(a: T[], b: T[]): boolean {
   if (a.length !== b.length) return false
@@ -214,20 +235,6 @@ export function generateStringOfMods(
   return mods
     .map(mod => String(mod) + (modsPref.includes(mod) ? "*" : ""))
     .join(", ")
-}
-
-/*
-
-RECORDS
-
-*/
-export type Rec = {
-  id: number
-  date: number
-  [others: string]: any
-}
-export type RecCollection = {
-  [id: string]: Rec
 }
 
 /*
